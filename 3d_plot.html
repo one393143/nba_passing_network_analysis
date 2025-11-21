@@ -3,1376 +3,348 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NBA Analytics Hub</title>
-    
-    <!-- Libraries -->
+    <title>NBA Passing Networks - Tactical Intelligence Hub</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/d3@7.9.0/dist/d3.min.js"></script>
-    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
     <style>
-      body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
-      .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-      .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-      .no-select { user-select: none; -webkit-user-select: none; }
-      .transition-all-300 { transition: all 0.3s ease-in-out; }
-      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-      .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap');
+        
+        body { 
+            background-color: #020617; /* Deepest slate/blue */
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+            margin: 0;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Sci-fi Glowing Grid Background */
+        .bg-grid {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: -2;
+            mask-image: radial-gradient(circle at 50% 60%, black 30%, transparent 80%);
+            pointer-events: none;
+        }
+        
+        /* Grid Glow Overlay */
+        .bg-glow {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 50% 70%, rgba(14, 165, 233, 0.15), transparent 60%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* Animations */
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-15px) scale(1.02); }
+        }
+        @keyframes floatNet {
+            0%, 100% { transform: translateY(0); opacity: 0.9; }
+            50% { transform: translateY(-5px); opacity: 1; }
+        }
+        @keyframes pulseBoard {
+            0%, 100% { border-color: rgba(56, 189, 248, 0.3); box-shadow: 0 0 20px rgba(56, 189, 248, 0.05); }
+            50% { border-color: rgba(56, 189, 248, 0.6); box-shadow: 0 0 40px rgba(56, 189, 248, 0.15); }
+        }
+        @keyframes flowLine {
+            0% { stroke-dashoffset: 20; }
+            100% { stroke-dashoffset: 0; }
+        }
+
+        /* Layout Containers */
+        .header-block {
+            height: 15%;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            position: relative;
+        }
+
+        .stage-block {
+            height: 85%;
+            width: 100%;
+            position: relative;
+            perspective: 1200px;
+            overflow: hidden;
+        }
+
+        /* Visual Layers (Absolute Positioning for overlap) */
+        
+        /* 1. The Board (Floor) - Takes up bottom 70% */
+        .layer-board {
+            position: absolute;
+            bottom: -10%; /* Extend below screen slightly */
+            left: 50%;
+            transform: translateX(-50%) rotateX(45deg);
+            width: 90%;
+            max-width: 800px;
+            height: 80%;
+            z-index: 10;
+            transition: transform 0.5s ease;
+        }
+        .board-svg {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(2, 6, 23, 0.95) 100%);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            animation: pulseBoard 4s infinite ease-in-out;
+        }
+
+        /* 2. The Network (Hologram) - In the middle of the board */
+        .layer-network {
+            position: absolute;
+            top: 35%; /* Vertically centered relative to stage */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            max-width: 600px;
+            height: 40%;
+            z-index: 20;
+            pointer-events: none; /* Let clicks pass through to links */
+        }
+        .network-svg {
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+            animation: floatNet 6s ease-in-out infinite;
+        }
+        .net-link {
+            fill: none;
+            stroke: #38bdf8;
+            stroke-width: 1.5;
+            opacity: 0.6;
+            stroke-dasharray: 4, 2;
+            animation: flowLine 1s linear infinite;
+        }
+        .net-node {
+            fill: #0f172a;
+            stroke: #38bdf8;
+            stroke-width: 2;
+            filter: drop-shadow(0 0 5px #0ea5e9);
+        }
+
+        /* 3. The Ball (Object) - Bouncing above network */
+        .layer-ball {
+            position: absolute;
+            top: 15%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px; /* Smaller size */
+            height: 80px;
+            z-index: 30;
+            pointer-events: none;
+        }
+        .ball-svg {
+            width: 100%;
+            height: 100%;
+            animation: bounce 1.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
+            filter: drop-shadow(0 20px 10px rgba(0,0,0,0.5));
+        }
+
+        /* Interactive Link Zones (The actual clickable areas) */
+        .link-zone {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        /* Top Zone: Performance */
+        .zone-perf {
+            top: 25%; /* Overlapping the ball area */
+            height: 60px;
+            z-index: 50;
+        }
+        
+        /* Middle Zone: Network */
+        .zone-net {
+            top: 50%; /* Overlapping network area */
+            height: 60px;
+            z-index: 50;
+        }
+        
+        /* Bottom Zone: Data */
+        .zone-data {
+            bottom: 15%; /* On the board */
+            height: 60px;
+            z-index: 50;
+        }
+
+        /* Label Styling */
+        .label-btn {
+            background: rgba(2, 6, 23, 0.8);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #e2e8f0;
+            padding: 8px 20px;
+            border-radius: 6px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            text-align: center;
+            white-space: nowrap;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            text-decoration: none;
+        }
+        
+        /* Hover Effects driven by the Link Zones */
+        .zone-perf:hover .label-btn { background: #fff; color: #ea580c; border-color: #ea580c; }
+        /* When hovering Perf zone, affect Ball */
+        .stage-block:has(.zone-perf:hover) .ball-svg { transform: scale(1.1); filter: drop-shadow(0 0 15px #ea580c); }
+
+        .zone-net:hover .label-btn { background: #fff; color: #0284c7; border-color: #0284c7; }
+        /* When hovering Net zone, affect Network */
+        .stage-block:has(.zone-net:hover) .net-link { stroke: #0ea5e9; stroke-width: 2; opacity: 1; }
+        .stage-block:has(.zone-net:hover) .net-node { fill: #0ea5e9; stroke: #fff; }
+
+        .zone-data:hover .label-btn { background: #fff; color: #3b82f6; border-color: #3b82f6; }
+        /* When hovering Data zone, affect Board */
+        .stage-block:has(.zone-data:hover) .board-svg { border-color: #60a5fa; box-shadow: 0 0 40px rgba(56, 189, 248, 0.4); }
+
     </style>
 </head>
-<body class="text-slate-800">
-    <div id="root"></div>
+<body>
 
-    <!-- 1. Shared Utilities & Config -->
-    <script type="text/babel">
-        window.Icons = {
-            Database: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s 9-1.34 9-3V5"/></svg>,
-            Network: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
-            Loader: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>,
-            AlertCircle: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
-            Link: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
-            Calendar: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>,
-            FileText: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>,
-            Rotate3D: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a9 9 0 1 0 9 9"></path><path d="M12 3v6"></path><path d="M21 12h-6"></path></svg>,
-            Upload: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
-            Play: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>,
-            Stop: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>,
-            Calculator: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="14"></line><line x1="12" y1="14" x2="12" y2="14"></line><line x1="8" y1="14" x2="8" y2="14"></line><line x1="16" y1="18" x2="16" y2="18"></line><line x1="12" y1="18" x2="12" y2="18"></line><line x1="8" y1="18" x2="8" y2="18"></line></svg>,
-            Filter: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>,
-        };
+    <div class="bg-grid"></div>
+    <div class="bg-glow"></div>
 
-        window.REPO_BASE = "https://raw.githubusercontent.com/one393143/nba_passing_network_analysis/refs/heads/main/data";
-        window.NBA_HEADSHOT_URL = (id) => `https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png`;
+    <!-- Header -->
+    <div class="header-block">
+        <h1 class="text-4xl md:text-6xl font-bold text-white tracking-widest drop-shadow-[0_0_25px_rgba(56,189,248,0.6)] text-center px-4">
+            NBA PASSING NETWORKS
+        </h1>
+        <div class="h-1 w-24 bg-gradient-to-r from-transparent via-sky-500 to-transparent mt-3 mb-2"></div>
+        <p class="text-sky-400/70 text-xs md:text-sm tracking-[0.4em] font-bold uppercase">
+            Tactical Intelligence Hub
+        </p>
+    </div>
+
+    <!-- Stage -->
+    <div class="stage-block">
         
-        window.getSeasonString = (year) => {
-            const nextYear = (year + 1) % 100;
-            return `${year}-${nextYear.toString().padStart(2, '0')}`;
-        };
-
-        window.parseCSV = (text) => {
-            const lines = text.trim().split('\n');
-            if (lines.length === 0) return { headers: [], data: [] };
-            const parseLine = (line) => line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(val => val.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-            const headers = parseLine(lines[0]);
-            const data = [];
-            for (let i = 1; i < lines.length; i++) {
-                const line = lines[i];
-                if (!line.trim()) continue;
-                const values = parseLine(line);
-                if (values.length >= headers.length) {
-                    const entry = {};
-                    headers.forEach((header, index) => { entry[header] = values[index] || ''; });
-                    data.push(entry);
-                }
-            }
-            return { headers, data };
-        };
-
-        window.FileUploadFallback = ({ onUpload, label = "Upload Data File" }) => (
-            <label className="inline-flex items-center px-4 py-2 border border-blue-200 shadow-sm text-sm font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">
-                <window.Icons.Upload />
-                <span className="ml-2">{label}</span>
-                <input type="file" className="hidden" accept=".csv,.json,.txt" onChange={onUpload} />
-            </label>
-        );
-
-        // Date Parser (Shared)
-        window.parseDateStr = (dateStr) => {
-            if (!dateStr) return null;
-            dateStr = dateStr.replace(/"/g, '');
-            const t = Date.parse(dateStr);
-            if (!isNaN(t)) {
-                const d = new Date(t);
-                return d.toISOString().split('T')[0];
-            }
-            const parts = dateStr.split('-');
-            if (parts.length === 3) {
-                const [day, monthStr, yearStr] = parts;
-                const months = { "Jan": 0, "Feb": 1, "Mar": 2, "Apr": 3, "May": 4, "Jun": 5, "Jul": 6, "Aug": 7, "Sep": 8, "Oct": 9, "Nov": 10, "Dec": 11 };
-                const year = parseInt(yearStr) + 2000;
-                const month = months[monthStr];
-                if (month !== undefined) {
-                     const d = new Date(Date.UTC(year, month, parseInt(day)));
-                     return d.toISOString().split('T')[0];
-                }
-            }
-            return null;
-        };
-    </script>
-
-    <!-- 2. Components -->
-    
-    <!-- DataExplorer Component -->
-    <script type="text/babel">
-    (function() {
-        const { useState, useEffect } = React;
-        const Icons = window.Icons;
-        const REPO_BASE = window.REPO_BASE;
-        const parseCSV = window.parseCSV;
-        const getSeasonString = window.getSeasonString;
-        const FileUploadFallback = window.FileUploadFallback;
-
-        const YEARS_RANGE = Array.from({ length: 10 }, (_, i) => 2015 + i);
-        const DATA_SOURCES = [
-            { id: 'passes_pergame', name: 'Passes Per Game (Yearly)', folder: 'passes_pergame', years: YEARS_RANGE, filename: (year) => `all_players_pass_data_${year}.csv` },
-            { id: 'performance_player_pergame', name: 'Player Game Performance (Yearly)', folder: 'performance_player_pergame', years: YEARS_RANGE, filename: (year) => `${getSeasonString(year)}_player_game_data.csv` },
-            { id: 'performance_player_season', name: 'Player Season Stats (Yearly)', folder: 'performance_player_season', years: YEARS_RANGE, filename: (year) => `${getSeasonString(year)}_all_players.csv` },
-            { id: 'team_game_stats', name: 'Team Game Stats (All Time)', folder: 'performance_team_pergame', years: [], filename: () => `all_seasons_all_games_team_stats.csv` },
-            { id: 'team_regular_season', name: 'Team Regular Season Stats (2015-2024)', folder: 'performance_team', years: [], filename: () => `nba_regular_season_stats_2015_to_2024.csv` },
-            { id: 'team_playoff', name: 'Team Playoff Stats (2015-2024)', folder: 'performance_team', years: [], filename: () => `nba_playoff_stats_2015_to_2024.csv` },
-            { id: 'team_standings', name: 'League Standings (2015-2024)', folder: 'performance_team', years: [], filename: () => `nba_league_standings_2015_to_2024.csv` },
-            { id: 'salary', name: 'Player Salaries', folder: 'players_detailed', years: [], filename: () => `salary from br.csv` }
-        ];
-
-        const DataExplorer = () => {
-            const [selectedSourceId, setSelectedSourceId] = useState(DATA_SOURCES[0].id);
-            const [selectedYear, setSelectedYear] = useState(DATA_SOURCES[0].years[0]);
-            const [urlInput, setUrlInput] = useState('');
-            const [csvData, setCsvData] = useState(null);
-            const [loading, setLoading] = useState(false);
-            const [error, setError] = useState(null);
-            const [currentPage, setCurrentPage] = useState(1);
-            const rowsPerPage = 50;
-
-            const currentSource = DATA_SOURCES.find(s => s.id === selectedSourceId) || DATA_SOURCES[0];
-            const isStaticSource = currentSource.years.length === 0;
-
-            useEffect(() => {
-                const filename = currentSource.filename(selectedYear);
-                const newUrl = `${REPO_BASE}/${currentSource.folder}/${encodeURIComponent(filename)}`;
-                setUrlInput(newUrl);
-                loadData(newUrl);
-            }, [selectedSourceId, selectedYear]);
-
-            const loadData = async (url) => {
-                if (!url.trim()) return;
-                try {
-                    setLoading(true);
-                    setError(null);
-                    const response = await fetch(url.trim());
-                    if (!response.ok) throw new Error(`Failed to fetch (${response.status}). Possible network restriction.`);
-                    const text = await response.text();
-                    const parsed = parseCSV(text);
-                    if (parsed.headers.length === 0) throw new Error('Parsed data is empty.');
-                    setCsvData(parsed);
-                    setCurrentPage(1);
-                } catch (err) {
-                    console.warn("Fetch failed, falling back to manual upload prompt:", err);
-                    setError(err.message || 'Error loading CSV.');
-                    setCsvData(null);
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            const handleFileUpload = (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setLoading(true);
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        const text = event.target?.result;
-                        const parsed = parseCSV(text);
-                        if (parsed.headers.length === 0) throw new Error('File is empty or invalid.');
-                        setCsvData(parsed);
-                        setError(null);
-                        setCurrentPage(1);
-                    } catch(err) {
-                        setError("Failed to parse file: " + err.message);
-                    } finally {
-                        setLoading(false);
-                    }
-                };
-                reader.onerror = () => {
-                    setError("Error reading file.");
-                    setLoading(false);
-                }
-                reader.readAsText(file);
-            };
-
-            const totalPages = csvData ? Math.ceil(csvData.data.length / rowsPerPage) : 0;
-            const currentRows = csvData ? csvData.data.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage) : [];
-
-            return (
-                <div className="space-y-6 animate-fade-in">
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                            <div className="md:col-span-4 space-y-1">
-                                <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                                    <Icons.FileText /> Dataset
-                                </label>
-                                <select 
-                                    value={selectedSourceId} 
-                                    onChange={(e) => {
-                                        const newSource = DATA_SOURCES.find(s => s.id === e.target.value);
-                                        setSelectedSourceId(e.target.value);
-                                        if (newSource && newSource.years.length > 0 && !newSource.years.includes(selectedYear)) {
-                                            setSelectedYear(newSource.years[0]);
-                                        }
-                                    }}
-                                    className="block w-full pl-3 pr-10 py-2 text-sm border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 rounded-lg bg-slate-50"
-                                >
-                                    {DATA_SOURCES.map(source => <option key={source.id} value={source.id}>{source.name}</option>)}
-                                </select>
-                            </div>
-
-                            {!isStaticSource && (
-                                <div className="md:col-span-2 space-y-1">
-                                    <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                                        <Icons.Calendar /> Season
-                                    </label>
-                                    <select 
-                                        value={selectedYear} 
-                                        onChange={(e) => setSelectedYear(Number(e.target.value))} 
-                                        className="block w-full pl-3 pr-10 py-2 text-sm border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 rounded-lg bg-slate-50"
-                                    >
-                                        {currentSource.years.map(year => <option key={year} value={year}>{year} ({getSeasonString(year)})</option>)}
-                                    </select>
-                                </div>
-                            )}
-
-                            <div className="md:col-span-6 space-y-1">
-                                <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                                    <Icons.Link /> Source URL
-                                </label>
-                                <form onSubmit={(e) => { e.preventDefault(); loadData(urlInput); }} className="flex gap-2">
-                                    <input 
-                                        type="text" 
-                                        value={urlInput} 
-                                        onChange={(e) => setUrlInput(e.target.value)} 
-                                        className="block w-full px-3 py-2 text-sm border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 rounded-lg bg-slate-50 text-slate-600 truncate"
-                                    />
-                                    <button 
-                                        type="submit" 
-                                        disabled={loading} 
-                                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 shadow-sm transition-colors"
-                                    >
-                                        {loading ? 'Loading' : 'Load'}
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    {loading && (
-                        <div className="flex justify-center py-16 text-slate-500">
-                            <div className="flex flex-col items-center gap-3">
-                                <Icons.Loader />
-                                <span className="text-sm font-medium">Retrieving data...</span>
-                            </div>
-                        </div>
-                    )}
-                    
-                    {error && (
-                        <div className="p-6 bg-red-50 border border-red-100 rounded-xl flex flex-col md:flex-row gap-6 items-center justify-between">
-                            <div className="flex items-start gap-4">
-                                <div className="text-red-500 mt-0.5"><Icons.AlertCircle /></div>
-                                <div>
-                                    <h3 className="text-sm font-bold text-red-800 mb-1">Connection Failed</h3>
-                                    <p className="text-sm text-red-600">{error}</p>
-                                    <p className="text-xs text-red-500 mt-2">If your network blocks GitHub Raw, please download the file manually and upload it here.</p>
-                                </div>
-                            </div>
-                            <FileUploadFallback onUpload={handleFileUpload} />
-                        </div>
-                    )}
-
-                    {csvData && !loading && !error && (
-                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-                            <div className="overflow-auto custom-scrollbar max-h-[600px] w-full">
-                                <table className="w-full text-sm text-left whitespace-nowrap">
-                                    <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 z-10 font-bold tracking-wider">
-                                        <tr>{csvData.headers.map((header, i) => <th key={i} className="px-6 py-4 border-b border-slate-200">{header}</th>)}</tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {currentRows.map((row, idx) => (
-                                            <tr key={idx} className="hover:bg-blue-50 transition-colors">
-                                                {csvData.headers.map((header, i) => <td key={i} className="px-6 py-3 text-slate-600">{row[header]}</td>)}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                            
-                            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-sm text-slate-600">
-                                <span className="font-medium">Page {currentPage} of {totalPages}</span>
-                                <div className="flex gap-2">
-                                    <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="px-4 py-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">Previous</button>
-                                    <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="px-4 py-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">Next</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        };
-
-        window.DataExplorer = DataExplorer;
-    })();
-    </script>
-
-    <!-- NetworkVisualizer Component -->
-    <script type="text/babel">
-    (function() {
-        const { useState, useEffect, useRef, useMemo } = React;
-        const Icons = window.Icons;
-        const REPO_BASE = window.REPO_BASE;
-        const parseCSV = window.parseCSV;
-        const getSeasonString = window.getSeasonString;
-        const NBA_HEADSHOT_URL = window.NBA_HEADSHOT_URL;
-        const FileUploadFallback = window.FileUploadFallback;
-        const parseDateStr = window.parseDateStr;
-
-        const YEARS_RANGE = Array.from({ length: 10 }, (_, i) => 2015 + i);
-
-        // Simplified Team Mapping (Same as Playground)
-        const NBA_TEAM_MAPPING = {
-            "Atlanta Hawks": "ATL", "Boston Celtics": "BOS", "Brooklyn Nets": "BKN", "Charlotte Hornets": "CHA", "Chicago Bulls": "CHI", "Cleveland Cavaliers": "CLE", "Dallas Mavericks": "DAL", "Denver Nuggets": "DEN", "Detroit Pistons": "DET", "Golden State Warriors": "GSW", "Houston Rockets": "HOU", "Indiana Pacers": "IND", "Los Angeles Clippers": "LAC", "Los Angeles Lakers": "LAL", "Memphis Grizzlies": "MEM", "Miami Heat": "MIA", "Milwaukee Bucks": "MIL", "Minnesota Timberwolves": "MIN", "New Orleans Pelicans": "NOP", "New York Knicks": "NYK", "Oklahoma City Thunder": "OKC", "Orlando Magic": "ORL", "Philadelphia 76ers": "PHI", "Phoenix Suns": "PHX", "Portland Trail Blazers": "POR", "Sacramento Kings": "SAC", "San Antonio Spurs": "SAS", "Toronto Raptors": "TOR", "Utah Jazz": "UTA", "Washington Wizards": "WAS",
-        };
-
-        const NetworkVisualizer = () => {
-            const [selectedYear, setSelectedYear] = useState(2024);
-            const [loading, setLoading] = useState(false);
-            const [fetchError, setFetchError] = useState(false);
-            
-            // Data
-            const [passData, setPassData] = useState([]); // passes_pergame
-            const [perfData, setPerfData] = useState([]); // performance_player_pergame
-            const [teams, setTeams] = useState([]);
-            const [selectedTeamId, setSelectedTeamId] = useState('');
-            
-            // Filters
-            const [dateRange, setDateRange] = useState({start: '', end: ''});
-            const [minMaxDate, setMinMaxDate] = useState({min: '', max: ''});
-            const [filters, setFilters] = useState({ minGP: 1, minMPG: 0, topN: 15 });
-            const [excludedPlayerIds, setExcludedPlayerIds] = useState(new Set()); // Manually unchecked
-
-            // UI Modes
-            const [isPreviewMode, setIsPreviewMode] = useState(false);
-            const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
-            const [autoRotate, setAutoRotate] = useState(false);
-            const [statsViewMode, setStatsViewMode] = useState('avg'); // 'avg' or 'total' for list
-
-            const svgRef = useRef(null);
-
-            const formatName = (lastFirst) => {
-                if (!lastFirst) return "Unknown";
-                const parts = lastFirst.split(',');
-                if (parts.length === 2) return `${parts[1].trim()} ${parts[0].trim()}`;
-                return lastFirst;
-            };
-
-            // Fetch Both Datasets
-            useEffect(() => {
-                const loadAllData = async () => {
-                    setLoading(true);
-                    setFetchError(false);
-                    setPassData([]);
-                    setPerfData([]);
-                    try {
-                        // 1. Fetch Pass Data
-                        const passFile = `all_players_pass_data_${selectedYear}.csv`;
-                        const passUrl = `${REPO_BASE}/passes_pergame/${passFile}`;
-                        const passRes = await fetch(passUrl);
-                        if (!passRes.ok) throw new Error('Pass data block');
-                        const passText = await passRes.text();
-                        const parsedPass = parseCSV(passText);
-                        
-                        // Process Pass Data to get Teams & Dates
-                        const uniqueTeams = new Map();
-                        const dates = [];
-                        const processedPassRows = [];
-                        
-                        parsedPass.data.forEach(row => {
-                            if (row.TEAM_ID && row.TEAM_NAME) uniqueTeams.set(row.TEAM_ID, row.TEAM_NAME);
-                            if (row.GAME_DATE) dates.push(row.GAME_DATE);
-                            // Normalize
-                            processedPassRows.push({
-                                ...row,
-                                isoDate: parseDateStr(row.GAME_DATE)
-                            });
-                        });
-                        setPassData(processedPassRows);
-
-                        const teamList = Array.from(uniqueTeams.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-                        setTeams(teamList);
-                        // Default selection logic
-                        if (teamList.length > 0) {
-                            setSelectedTeamId(prev => {
-                                // Try to keep existing selection if valid
-                                const exists = teamList.find(t => t.id === prev);
-                                return exists ? prev : teamList[0].id;
-                            });
-                        }
-
-                        dates.sort();
-                        if (dates.length > 0) {
-                            // Better: use ISO dates for range
-                            const isoDates = processedPassRows.map(r => r.isoDate).filter(Boolean).sort();
-                            if (isoDates.length > 0) {
-                                const minIso = isoDates[0];
-                                const maxIso = isoDates[isoDates.length - 1];
-                                
-                                // --- FIX: Add 1 Month Buffer to Start/End ---
-                                // This ensures games on the boundary (or slight timezone shifts) are included
-                                const minD = new Date(minIso);
-                                minD.setMonth(minD.getMonth() - 1);
-                                const bufferedMin = minD.toISOString().split('T')[0];
-
-                                const maxD = new Date(maxIso);
-                                maxD.setMonth(maxD.getMonth() + 1);
-                                const bufferedMax = maxD.toISOString().split('T')[0];
-
-                                setMinMaxDate({ min: bufferedMin, max: bufferedMax });
-                                setDateRange({ start: bufferedMin, end: bufferedMax });
-                            }
-                        }
-
-                        // 2. Fetch Performance Data (for filters)
-                        const perfFile = `${getSeasonString(selectedYear)}_player_game_data.csv`;
-                        const perfUrl = `${REPO_BASE}/performance_player_pergame/${perfFile}`;
-                        const perfRes = await fetch(perfUrl);
-                        if (!perfRes.ok) throw new Error('Perf data block');
-                        const perfText = await perfRes.text();
-                        const parsedPerf = parseCSV(perfText);
-                        
-                        // Process Perf Data
-                        const processedPerfRows = [];
-                        parsedPerf.data.forEach(row => {
-                            const gameId = row.GAME_ID || row.Game_ID || row['Game_ID'] || row['GAME_ID'];
-                            const playerId = row.PLAYER_ID || row.Player_ID || row['Player_ID'] || row['PLAYER_ID'];
-                            if (!gameId || !playerId) return;
-                            
-                            // Parse Team from MATCHUP
-                            let realAbbr = "";
-                            if (row.MATCHUP) {
-                                const matchParts = row.MATCHUP.split(' ');
-                                if (matchParts.length > 0) realAbbr = matchParts[0];
-                            }
-
-                            processedPerfRows.push({
-                                ...row,
-                                isoDate: parseDateStr(row.GAME_DATE),
-                                realAbbr,
-                                PLAYER_ID: playerId,
-                                PLAYER_NAME: row.PLAYER_NAME || row.Player_Name,
-                                GAME_ID: gameId
-                            });
-                        });
-                        setPerfData(processedPerfRows);
-
-                    } catch (e) {
-                        console.warn("Auto-load failed.", e);
-                        setFetchError(true);
-                    } finally {
-                        setLoading(false);
-                    }
-                };
-                loadAllData();
-            }, [selectedYear]);
-
-            // Handlers for Uploads
-            const handlePassUpload = (e) => { 
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setLoading(true);
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        const text = event.target?.result;
-                        const parsed = parseCSV(text);
-                        if(parsed.data && parsed.data.length > 0) {
-                             // Partial Load: only pass data (better than nothing)
-                             const uniqueTeams = new Map();
-                             const processedPassRows = [];
-                             parsed.data.forEach(row => {
-                                if (row.TEAM_ID && row.TEAM_NAME) uniqueTeams.set(row.TEAM_ID, row.TEAM_NAME);
-                                processedPassRows.push({ ...row, isoDate: parseDateStr(row.GAME_DATE) });
-                             });
-                             setPassData(processedPassRows);
-                             const teamList = Array.from(uniqueTeams.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-                             setTeams(teamList);
-                             if (teamList.length > 0 && !selectedTeamId) setSelectedTeamId(teamList[0].id);
-                             setFetchError(false);
-                        }
-                    } catch(err) { alert("Failed to parse file"); } 
-                    finally { setLoading(false); }
-                };
-                reader.readAsText(file);
-            };
-            
-            // -------------------
-            // Aggregation Logic
-            // -------------------
-
-            // 1. Calculate Active Player List based on Performance Data & Filters
-            const filteredPlayers = useMemo(() => {
-                if (!selectedTeamId || perfData.length === 0) return [];
+        <!-- LAYER 1: Board (Data Base) -->
+        <div class="layer-board">
+            <svg class="board-svg" viewBox="0 0 400 300" preserveAspectRatio="none">
+                <!-- Floor Grid Pattern -->
+                <defs>
+                    <pattern id="floorGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+                        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(56,189,248,0.08)" stroke-width="1"/>
+                    </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#floorGrid)" />
                 
-                const selectedTeamName = teams.find(t => t.id === selectedTeamId)?.name;
-                const targetAbbr = NBA_TEAM_MAPPING[selectedTeamName];
+                <!-- Court Markings (Key Area) -->
+                <path d="M120,0 L120,140 L280,140 L280,0" fill="none" stroke="rgba(56,189,248,0.15)" stroke-width="2" />
+                <path d="M120,140 A80,80 0 0,0 280,140" fill="none" stroke="rgba(56,189,248,0.15)" stroke-width="2" stroke-dasharray="5,5" />
+                <path d="M120,140 A80,80 0 0,1 280,140" fill="none" stroke="rgba(56,189,248,0.15)" stroke-width="2" />
+                <circle cx="200" cy="140" r="20" fill="none" stroke="rgba(56,189,248,0.2)" stroke-width="2" />
                 
-                // Deduplication Map (GameID_PlayerID)
-                const uniqueGameMap = new Map();
+                <!-- 3pt Line Abstract -->
+                <path d="M20,0 L20,50 Q20,200 200,240 Q380,200 380,50 L380,0" fill="none" stroke="rgba(56,189,248,0.15)" stroke-width="3" />
+            </svg>
+        </div>
+
+        <!-- LAYER 2: Network (Hologram) -->
+        <div class="layer-network">
+            <svg class="network-svg" viewBox="0 0 400 200">
+                <defs>
+                    <marker id="arrow-glow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto">
+                        <path d="M0,0 L10,5 L0,10" fill="#38bdf8" />
+                    </marker>
+                </defs>
                 
-                const playerAgg = new Map();
+                <!-- Nodes (Pentagon Formation) -->
+                <!-- 1. Top (PG) -->
+                <circle cx="200" cy="20" r="6" class="net-node" />
+                <!-- 2. Left Wing (SG) -->
+                <circle cx="80" cy="80" r="6" class="net-node" />
+                <!-- 3. Right Wing (SF) -->
+                <circle cx="320" cy="80" r="6" class="net-node" />
+                <!-- 4. Left Corner (PF) -->
+                <circle cx="120" cy="170" r="6" class="net-node" />
+                <!-- 5. Right Corner (C) -->
+                <circle cx="280" cy="170" r="6" class="net-node" />
 
-                perfData.forEach(row => {
-                    // 1. Filter by Team (Abbr)
-                    if (targetAbbr && row.realAbbr !== targetAbbr) return;
-                    // 2. Filter by Date
-                    if (dateRange.start && row.isoDate < dateRange.start) return;
-                    if (dateRange.end && row.isoDate > dateRange.end) return;
-                    
-                    // Dedupe
-                    const uniqueKey = `${row.GAME_ID}_${row.PLAYER_ID}`;
-                    if (uniqueGameMap.has(uniqueKey)) return;
-                    uniqueGameMap.set(uniqueKey, true);
-
-                    // Aggregate
-                    const pid = row.PLAYER_ID;
-                    if (!playerAgg.has(pid)) {
-                        playerAgg.set(pid, { id: pid, name: row.PLAYER_NAME, gp: 0, min: 0, pts: 0, ast: 0 });
-                    }
-                    const p = playerAgg.get(pid);
-                    p.gp += 1;
-                    p.min += parseFloat(row.MIN || 0);
-                    p.pts += parseFloat(row.PTS || 0);
-                    p.ast += parseFloat(row.AST || 0);
-                });
-
-                let result = Array.from(playerAgg.values());
-
-                // 3. Apply Filters
-                result = result.filter(p => p.gp >= filters.minGP);
-                result = result.filter(p => (p.min / p.gp) >= filters.minMPG);
-
-                // 4. Top N (by Avg Minutes)
-                result.sort((a, b) => (b.min / b.gp) - (a.min / a.gp));
-                const topNList = result.slice(0, filters.topN);
+                <!-- Curved Links -->
+                <!-- Top to Wings -->
+                <path d="M200,20 Q140,50 80,80" class="net-link" marker-end="url(#arrow-glow)" />
+                <path d="M200,20 Q260,50 320,80" class="net-link" marker-end="url(#arrow-glow)" />
                 
-                return topNList;
-            }, [perfData, selectedTeamId, dateRange, filters, teams]);
-
-            // 2. Calculate Graph Nodes & Links
-            const graphData = useMemo(() => {
-                if (!selectedTeamId || passData.length === 0) return { nodes: [], links: [] };
+                <!-- Wing to Wing (Cross) -->
+                <path d="M80,80 Q200,120 320,80" class="net-link" marker-end="url(#arrow-glow)" />
                 
-                const hasPerfData = perfData.length > 0;
-                // Create a Set of allowed Player IDs from the Performance Filter
-                // Only apply strict filtering if performance data was successfully loaded
-                const allowedIds = hasPerfData ? new Set(filteredPlayers.map(p => p.id)) : null;
-
-                const filteredPasses = passData.filter(row => {
-                    if (row.TEAM_ID !== selectedTeamId) return false;
-                    if (dateRange.start && row.isoDate < dateRange.start) return false;
-                    if (dateRange.end && row.isoDate > dateRange.end) return false;
-                    return true;
-                });
-
-                const nodeMap = new Map();
-                const linkMap = new Map();
-
-                filteredPasses.forEach(row => {
-                    const sourceId = row.PLAYER_ID;
-                    const targetId = row.PASS_TEAMMATE_PLAYER_ID;
-                    
-                    // Filter: Must be in allowed list AND not manually excluded
-                    if (hasPerfData && allowedIds && !allowedIds.has(sourceId)) return;
-                    if (hasPerfData && allowedIds && !allowedIds.has(targetId)) return;
-                    if (excludedPlayerIds.has(sourceId) || excludedPlayerIds.has(targetId)) return;
-
-                    const passes = parseInt(row.PASS || '0', 10);
-                    const assists = parseInt(row.AST || '0', 10);
-
-                    // Use Name from Pass Data as fallback, or Perf Data if available
-                    const sourceName = formatName(row.PLAYER_NAME_LAST_FIRST);
-                    const targetName = formatName(row.PASS_TO);
-
-                    if (!nodeMap.has(sourceId)) nodeMap.set(sourceId, { id: sourceId, name: sourceName, assists: 0, z: (Math.random() - 0.5) * 400 });
-                    if (!nodeMap.has(targetId)) nodeMap.set(targetId, { id: targetId, name: targetName, assists: 0, z: (Math.random() - 0.5) * 400 });
-
-                    nodeMap.get(sourceId).assists += assists;
-
-                    const linkKey = `${sourceId}->${targetId}`;
-                    if (!linkMap.has(linkKey)) linkMap.set(linkKey, { source: sourceId, target: targetId, weight: 0, assists: 0 });
-                    linkMap.get(linkKey).weight += passes;
-                    linkMap.get(linkKey).assists += assists;
-                });
-
-                return { nodes: Array.from(nodeMap.values()), links: Array.from(linkMap.values()).filter(l => l.weight > 0) };
-            }, [selectedTeamId, dateRange, passData, filteredPlayers, perfData, excludedPlayerIds]);
-
-
-            // -------------------
-            // Visualizer Logic (D3)
-            // -------------------
-            
-            // Reuse existing 3D projection and D3 logic
-            const project3D = (x, y, z, angleX, angleY, angleZ, centerX, centerY) => {
-                const radX = angleX * Math.PI / 180;
-                const radY = angleY * Math.PI / 180;
-                const radZ = angleZ * Math.PI / 180;
-                let x1 = x * Math.cos(radY) - z * Math.sin(radY);
-                let z1 = z * Math.cos(radY) + x * Math.sin(radY);
-                let y1 = y * Math.cos(radX) - z1 * Math.sin(radX);
-                let z2 = z1 * Math.cos(radX) + y * Math.sin(radX);
-                let x2 = x1 * Math.cos(radZ) - y1 * Math.sin(radZ);
-                let y2 = y1 * Math.cos(radZ) + x1 * Math.sin(radZ);
-                const focalLength = 1000;
-                const scale = focalLength / (focalLength + z2);
-                return { x: x2 * scale + centerX, y: y2 * scale + centerY, scale: scale, depth: z2 };
-            };
-
-            useEffect(() => {
-                if (!svgRef.current || graphData.nodes.length === 0) return;
-                const width = 1000;
-                const height = 800;
-                const svg = d3.select(svgRef.current);
-                svg.selectAll("*").remove();
-                let selectedNodeId = null;
-
-                const defs = svg.append("defs");
-                defs.append("marker").attr("id", "arrow-normal").attr("viewBox", "0 -5 10 10").attr("refX", 24).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto").append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", "#9ca3af");
-                defs.append("marker").attr("id", "arrow-out").attr("viewBox", "0 -5 10 10").attr("refX", 24).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto").append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", "#22c55e");
-                defs.append("marker").attr("id", "arrow-in").attr("viewBox", "0 -5 10 10").attr("refX", 24).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto").append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", "#ef4444");
+                <!-- Wings to Corners -->
+                <path d="M80,80 Q100,125 120,170" class="net-link" marker-end="url(#arrow-glow)" />
+                <path d="M320,80 Q300,125 280,170" class="net-link" marker-end="url(#arrow-glow)" />
                 
-                const gradient = defs.append("radialGradient").attr("id", "sphere-shine").attr("cx", "35%").attr("cy", "35%").attr("r", "60%").attr("fx", "30%").attr("fy", "30%");
-                gradient.append("stop").attr("offset", "0%").attr("stop-color", "#fff").attr("stop-opacity", 0.4);
-                gradient.append("stop").attr("offset", "100%").attr("stop-color", "#000").attr("stop-opacity", 0.4);
-                defs.append("filter").attr("id", "blur-shadow").append("feGaussianBlur").attr("stdDeviation", 8);
-                if (isPreviewMode) {
-                    graphData.nodes.forEach(node => {
-                         defs.append("clipPath").attr("id", `clip-${node.id}`).append("circle").attr("r", 35).attr("cx", 0).attr("cy", 0);
-                    });
-                }
-
-                const gridLines = [];
-                const gridSize = 1200;
-                const gridStep = 150;
-                const gridY = 400; 
-                for (let i = -gridSize; i <= gridSize; i += gridStep) {
-                    gridLines.push({ x1: -gridSize, y1: gridY, z1: i, x2: gridSize, y2: gridY, z2: i });
-                    gridLines.push({ x1: i, y1: gridY, z1: -gridSize, x2: i, y2: gridY, z2: gridSize });
-                }
-
-                const zoomGroup = svg.append("g");
-                zoomGroup.append("rect").attr("x", -width * 2).attr("y", -height * 2).attr("width", width * 4).attr("height", height * 4).attr("fill", "transparent").on("click", () => { selectedNodeId = null; updateHighlights(); });
-                if (!isPreviewMode) {
-                    const zoom = d3.zoom().scaleExtent([0.5, 3]).on("zoom", (e) => zoomGroup.attr("transform", e.transform));
-                    svg.call(zoom);
-                }
-
-                const container = zoomGroup.append("g").attr("transform", `translate(${width/2}, ${height/2})`);
-                const gridSelection = container.append("g").attr("class", "grid-group").selectAll("path").data(gridLines).enter().append("path").attr("stroke", "#94a3b8").attr("stroke-width", 1).attr("fill", "none");
-                let shadowSelection = container.append("g").attr("class", "shadow-group").selectAll("ellipse").data(graphData.nodes).enter().append("ellipse").attr("fill", "#000").attr("opacity", 0.2).attr("filter", "url(#blur-shadow)");
-                let linkSelection = container.append("g").attr("class", "link-group").selectAll("g").data(graphData.links).enter().append("g");
-                const linkPath = linkSelection.append("path").attr("class", "link").attr("fill", "none").attr("stroke", isPreviewMode ? "#ccc" : "#9ca3af").attr("stroke-opacity", isPreviewMode ? 0.1 : 0.2).attr("marker-end", isPreviewMode ? null : "url(#arrow-normal)");
-                if (!isPreviewMode) {
-                    linkSelection.append("text").attr("text-anchor", "middle").style("font-size", "10px").style("fill", "#4b5563").style("font-weight", "bold").style("opacity", 0).text((d) => `${d.weight} P / ${d.assists} A`);
-                }
-
-                const updateHighlights = () => {
-                    if (!selectedNodeId) {
-                         d3.selectAll(".node-stat").style("opacity", 0);
-                         linkPath.attr("stroke", isPreviewMode ? "#ccc" : "#9ca3af").attr("stroke-opacity", isPreviewMode ? 0.1 : 0.2).attr("stroke-width", 1).attr("marker-end", isPreviewMode ? null : "url(#arrow-normal)");
-                         nodeSelection.style("opacity", 1);
-                         if(!isPreviewMode) {
-                             nodeSelection.select(".node-circle").attr("fill", "#60a5fa").attr("stroke", "#fff");
-                             d3.selectAll(".link-group text").style("opacity", 0);
-                         }
-                         return;
-                    }
-                    nodeSelection.style("opacity", (n) => {
-                         if (n.id === selectedNodeId) return 1;
-                         const isNeighbor = graphData.links.some((l) => (l.source.id === selectedNodeId && l.target.id === n.id) || (l.target.id === selectedNodeId && l.source.id === n.id));
-                         return isNeighbor ? 1 : 0.1;
-                    });
-                    nodeSelection.filter((d) => d.id === selectedNodeId).select(".node-stat").style("opacity", 1);
-                    nodeSelection.filter((d) => d.id !== selectedNodeId).select(".node-stat").style("opacity", 0);
-                    if (!isPreviewMode) {
-                        nodeSelection.filter((d) => d.id === selectedNodeId).select(".node-circle").attr("fill", "#fbbf24").attr("stroke", "#000");
-                        nodeSelection.filter((d) => d.id !== selectedNodeId).select(".node-circle").attr("fill", "#60a5fa").attr("stroke", "#fff");
-                    }
-                    linkPath.each(function(l) {
-                        const sel = d3.select(this);
-                        const textSel = !isPreviewMode ? d3.select(this.parentNode).select("text") : null;
-                        if (l.source.id === selectedNodeId) {
-                            sel.attr("stroke", "#22c55e").attr("stroke-opacity", 0.8).attr("stroke-width", 2).attr("marker-end", "url(#arrow-out)");
-                            if(textSel) { textSel.style("opacity", 1).style("fill", "#15803d"); }
-                        } else if (l.target.id === selectedNodeId) {
-                            sel.attr("stroke", "#ef4444").attr("stroke-opacity", 0.8).attr("stroke-width", 2).attr("marker-end", "url(#arrow-in)");
-                            if(textSel) { textSel.style("opacity", 1).style("fill", "#b91c1c"); }
-                        } else {
-                            sel.attr("stroke-opacity", 0.05);
-                            if(textSel) { textSel.style("opacity", 0); }
-                        }
-                    });
-                };
-
-                let nodeSelection = container.append("g").attr("class", "node-group").selectAll("g").data(graphData.nodes).enter().append("g").attr("class", "node");
-                if (isPreviewMode) {
-                     nodeSelection.append("circle").attr("r", 35).attr("fill", "#fff");
-                     nodeSelection.append("image").attr("xlink:href", (d) => NBA_HEADSHOT_URL(d.id)).attr("x", -35).attr("y", -35).attr("width", 70).attr("height", 70).attr("clip-path", (d) => `url(#clip-${d.id})`).style("cursor", "pointer").on("error", function() { d3.select(this).attr("visibility", "hidden"); });
-                     nodeSelection.append("circle").attr("r", 35).attr("fill", "url(#sphere-shine)").style("pointer-events", "none");
-                     nodeSelection.append("text").text((d) => d.name).attr("class", "node-label").attr("text-anchor", "middle").attr("dy", 50).style("font-size", "14px").style("font-weight", "bold").style("fill", "#1f2937").style("text-shadow", "2px 0 #fff, -2px 0 #fff, 0 2px #fff, 0 -2px #fff");
-                     nodeSelection.append("text").attr("class", "node-stat").text((d) => `Ast: ${d.assists}`).attr("text-anchor", "middle").attr("dy", 65).style("font-size", "12px").style("fill", "#dc2626").style("font-weight", "bold").style("opacity", 0);
-                     nodeSelection.on("click", function(e, d) { e.stopPropagation(); selectedNodeId = (selectedNodeId === d.id) ? null : d.id; updateHighlights(); });
-                } else {
-                    nodeSelection.append("circle").attr("class", "node-circle").attr("fill", "#60a5fa").attr("stroke", "#fff").attr("stroke-width", 2).style("cursor", "pointer");
-                    nodeSelection.append("text").attr("class", "node-label").text((d) => d.name).attr("text-anchor", "middle").attr("dominant-baseline", "middle").style("font-size", "12px").style("font-weight", "600").style("fill", "#1f2937").style("pointer-events", "none").style("text-shadow", "0px 0px 4px rgba(255,255,255,0.9)");
-                    nodeSelection.append("text").attr("class", "node-stat").text((d) => `Ast: ${d.assists}`).attr("text-anchor", "middle").style("font-size", "11px").style("fill", "#dc2626").style("font-weight", "bold").style("opacity", 0);
-                    nodeSelection.on("click", function(e, d) { e.stopPropagation(); selectedNodeId = (selectedNodeId === d.id) ? null : d.id; updateHighlights(); });
-                }
-
-                let ballSelection = container.append("g").attr("class", "balls-group").selectAll(".ball");
-                const maxAssists = d3.max(graphData.nodes, (d) => d.assists) || 1;
-                const nodeRadiusScale = d3.scaleLinear().domain([0, maxAssists]).range([15, 45]);
-                const linkWidthScale = d3.scaleLinear().domain([1, d3.max(graphData.links, (d) => d.weight) || 1]).range([1, 6]);
-                const simulation = d3.forceSimulation(graphData.nodes).force("link", d3.forceLink(graphData.links).id((d) => d.id).distance(400)).force("charge", d3.forceManyBody().strength(-400)).force("center", d3.forceCenter(0, 0)).force("collide", d3.forceCollide().radius(50));
-
-                let activeBalls = [];
-                let rotationY = rotation.y;
-                let lastTime = 0;
-
-                const renderFrame = (timestamp) => {
-                    if (autoRotate) {
-                        const dt = timestamp - lastTime;
-                        if (lastTime > 0) rotationY = (rotationY + 0.05 * dt/16) % 360;
-                        lastTime = timestamp;
-                    } else { rotationY = rotation.y; lastTime = 0; }
-                    const rX = rotation.x, rZ = rotation.z;
-
-                    gridSelection.attr("d", (d) => {
-                        const p1 = project3D(d.x1, d.y1, d.z1, rX, rotationY, rZ, 0, 0);
-                        const p2 = project3D(d.x2, d.y2, d.z2, rX, rotationY, rZ, 0, 0);
-                        return `M${p1.x},${p1.y}L${p2.x},${p2.y}`;
-                    }).attr("stroke-opacity", (d) => { const p1 = project3D(d.x1, d.y1, d.z1, rX, rotationY, rZ, 0, 0); return Math.max(0.05, p1.scale * 0.2); });
-
-                    graphData.nodes.forEach((n) => { const proj = project3D(n.x || 0, n.y || 0, n.z, rX, rotationY, rZ, 0, 0); n.px = proj.x; n.py = proj.y; n.pz = proj.depth; n.scale = proj.scale; });
-                    shadowSelection.attr("cx", (d) => project3D(d.x || 0, gridY, d.z, rX, rotationY, rZ, 0, 0).x).attr("cy", (d) => project3D(d.x || 0, gridY, d.z, rX, rotationY, rZ, 0, 0).y).attr("rx", (d) => nodeRadiusScale(d.assists) * project3D(d.x, gridY, d.z, rX, rotationY, rZ, 0, 0).scale * 1.2).attr("ry", (d) => nodeRadiusScale(d.assists) * project3D(d.x, gridY, d.z, rX, rotationY, rZ, 0, 0).scale * 0.4);
-                    nodeSelection.sort((a, b) => b.pz - a.pz);
-                    linkSelection.sort((a, b) => ((b.source.pz + b.target.pz) / 2) - ((a.source.pz + a.target.pz) / 2));
-
-                    nodeSelection.attr("transform", (d) => `translate(${d.px},${d.py}) scale(${d.scale})`).style("filter", (d) => `brightness(${0.7 + (d.scale * 0.4)})`);
-                    if (!isPreviewMode) {
-                        nodeSelection.select("circle").attr("r", (d) => nodeRadiusScale(d.assists));
-                        nodeSelection.select(".node-stat").attr("dy", (d) => nodeRadiusScale(d.assists) + 15);
-                    }
-
-                    linkSelection.select("path").attr("d", (d) => {
-                        const dx = d.target.px - d.source.px;
-                        const dy = d.target.py - d.source.py;
-                        const dr = Math.sqrt(dx * dx + dy * dy) * 1.5; 
-                        d.pathCache = `M${d.source.px},${d.source.py}A${dr},${dr} 0 0,1 ${d.target.px},${d.target.py}`;
-                        return d.pathCache;
-                    }).attr("stroke-width", (d) => linkWidthScale(d.weight) * ((d.source.scale + d.target.scale)/2));
-
-                    if (isPreviewMode) {
-                         graphData.links.forEach((link, i) => {
-                             if (Math.random() < (link.weight * 0.002)) {
-                                 const assistRatio = link.weight > 0 ? (link.assists / link.weight) : 0;
-                                 activeBalls.push({ linkIndex: i, t: 0, speed: 0.01 + Math.random() * 0.005, sourcePz: link.source.pz, targetPz: link.target.pz, isAssist: Math.random() < assistRatio });
-                             }
-                         });
-                         activeBalls.forEach(b => b.t += b.speed);
-                         activeBalls = activeBalls.filter(b => b.t < 1);
-                         ballSelection = container.select(".balls-group").selectAll(".ball").data(activeBalls);
-                         ballSelection.exit().remove();
-                         ballSelection.enter().append("circle").attr("class", "ball").attr("r", 5).attr("stroke", "rgba(0,0,0,0.5)").attr("stroke-width", 0.5).merge(ballSelection).attr("fill", (b) => b.isAssist ? "#22c55e" : "#f97316").attr("opacity", (b) => { if (!selectedNodeId) return 1; const link = graphData.links[b.linkIndex]; return (link.source.id === selectedNodeId || link.target.id === selectedNodeId) ? 1 : 0.05; }).attr("transform", (b) => {
-                                const link = graphData.links[b.linkIndex];
-                                const p0 = {x: link.source.px, y: link.source.py};
-                                const p2 = {x: link.target.px, y: link.target.py};
-                                const dx = p2.x - p0.x, dy = p2.y - p0.y, dist = Math.sqrt(dx*dx + dy*dy);
-                                const mx = (p0.x + p2.x)/2, my = (p0.y + p2.y)/2;
-                                const perpX = -dy/dist, perpY = dx/dist, curveMag = dist * 0.3; 
-                                const cx = mx + perpX * curveMag, cy = my + perpY * curveMag;
-                                const t = b.t, invT = 1 - t;
-                                const x = (invT * invT * p0.x) + (2 * invT * t * cx) + (t * t * p2.x);
-                                const y = (invT * invT * p0.y) + (2 * invT * t * cy) + (t * t * p2.y);
-                                const depth = (b.sourcePz * invT) + (b.targetPz * t);
-                                const scale = 1000 / (1000 + depth);
-                                return `translate(${x},${y}) scale(${scale})`;
-                            });
-                    }
-                };
-
-                const timer = d3.timer((elapsed) => { renderFrame(elapsed); });
-                return () => { timer.stop(); simulation.stop(); };
-            }, [graphData, rotation, autoRotate, isPreviewMode]);
-
-            const resetRotation = () => { setRotation({ x: 0, y: 0, z: 0 }); setAutoRotate(false); };
-            
-            // List stats rendering helper
-            const renderStatVal = (player, key, isAvg) => {
-                const val = player[key];
-                if (isAvg) return (val / (player.gp || 1)).toFixed(1);
-                return val.toFixed(0);
-            };
-
-            return (
-                <div className="space-y-6">
-                    {/* Controls */}
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4">
-                         <div className="flex flex-wrap gap-4 items-end">
-                            <div className="w-40">
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Season</label>
-                                <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className="block w-full border-slate-300 rounded-lg shadow-sm py-2 px-3 border text-sm focus:ring-blue-500 focus:border-blue-500">
-                                    {YEARS_RANGE.map(y => <option key={y} value={y}>{y} ({getSeasonString(y)})</option>)}
-                                </select>
-                            </div>
-                            <div className="flex-1 min-w-[200px]">
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Team</label>
-                                <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)} disabled={loading || teams.length === 0} className="block w-full border-slate-300 rounded-lg shadow-sm py-2 px-3 border text-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100">
-                                    {teams.length === 0 && <option>Loading teams...</option>}
-                                    {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="w-36">
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Start Date</label>
-                                <input type="date" value={dateRange.start} min={minMaxDate.min} max={minMaxDate.max} onChange={e => setDateRange(prev => ({...prev, start: e.target.value}))} className="block w-full border-slate-300 rounded-lg shadow-sm py-2 px-3 border text-sm focus:ring-blue-500 focus:border-blue-500" />
-                            </div>
-                            <div className="w-36">
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">End Date</label>
-                                <input type="date" value={dateRange.end} min={minMaxDate.min} max={minMaxDate.max} onChange={e => setDateRange(prev => ({...prev, end: e.target.value}))} className="block w-full border-slate-300 rounded-lg shadow-sm py-2 px-3 border text-sm focus:ring-blue-500 focus:border-blue-500" />
-                            </div>
-                            
-                            <div className="flex-none">
-                                <button onClick={() => setIsPreviewMode(!isPreviewMode)} className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm font-medium text-sm transition-colors ${isPreviewMode ? 'bg-red-100 text-red-700 border border-red-200 hover:bg-red-200' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
-                                    {isPreviewMode ? <><Icons.Stop /> Stop Animation</> : <><Icons.Play /> Preview 3D</>}
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Advanced Filters Row */}
-                        <div className="flex items-center gap-4 pt-4 border-t border-slate-100">
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-slate-500 font-bold text-xs uppercase">Min GP:</span>
-                                <input type="number" min="1" max="82" value={filters.minGP} onChange={e => setFilters(prev => ({...prev, minGP: parseInt(e.target.value)||1}))} className="w-16 border border-slate-300 rounded px-2 py-1 text-sm" />
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-slate-500 font-bold text-xs uppercase">Min MPG:</span>
-                                <input type="number" min="0" max="48" value={filters.minMPG} onChange={e => setFilters(prev => ({...prev, minMPG: parseInt(e.target.value)||0}))} className="w-16 border border-slate-300 rounded px-2 py-1 text-sm" />
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-slate-500 font-bold text-xs uppercase">Top N Rotation:</span>
-                                <input type="number" min="5" max="30" value={filters.topN} onChange={e => setFilters(prev => ({...prev, topN: parseInt(e.target.value)||15}))} className="w-16 border border-slate-300 rounded px-2 py-1 text-sm" />
-                            </div>
-                            {perfData.length === 0 && !loading && (
-                                <span className="text-xs text-amber-600 flex items-center gap-1 bg-amber-50 px-2 py-1 rounded">
-                                    <Icons.AlertCircle /> Filters require performance data.
-                                </span>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 border border-slate-200 rounded-2xl shadow-inner h-[750px] relative overflow-hidden group">
-                         <div className="absolute top-6 left-6 z-10 pointer-events-none bg-white/80 backdrop-blur p-4 rounded-xl border border-slate-100 shadow-sm">
-                            <h3 className="text-lg font-bold text-slate-800">Passing Network {isPreviewMode && "(Live Preview)"}</h3>
-                            <p className="text-xs text-slate-500 mt-1 font-medium">{teams.find(t => t.id === selectedTeamId)?.name} | {graphData.nodes.length} Players | {graphData.links.length} Connections</p>
-                        </div>
-                        
-                        {!isPreviewMode && (
-                        <div className="absolute top-6 right-6 z-10 flex flex-col gap-4 items-end pointer-events-auto">
-                            <div className="bg-white/90 backdrop-blur p-4 rounded-xl shadow-sm border border-slate-200 w-64 transition-opacity hover:opacity-100 opacity-90">
-                                <div className="flex justify-between items-center mb-3">
-                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider"><Icons.Rotate3D /> 3D Controls</div>
-                                    <button onClick={() => setAutoRotate(!autoRotate)} className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide transition-colors ${autoRotate ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{autoRotate ? 'Stop' : 'Auto'}</button>
-                                </div>
-                                <div className="space-y-4">
-                                    <div className="flex items-center gap-3 text-xs"><span className="w-3 font-bold text-slate-400">X</span><input type="range" min="-90" max="90" value={rotation.x} onChange={e => setRotation({...rotation, x: Number(e.target.value)})} className="flex-1 h-1.5 bg-slate-200 rounded-lg cursor-pointer accent-blue-600" /><span className="w-8 text-right font-mono text-slate-600">{rotation.x}°</span></div>
-                                    <div className="flex items-center gap-3 text-xs"><span className="w-3 font-bold text-slate-400">Y</span><input type="range" min="0" max="360" value={rotation.y} onChange={e => setRotation({...rotation, y: Number(e.target.value)})} className="flex-1 h-1.5 bg-slate-200 rounded-lg cursor-pointer accent-blue-600" /><span className="w-8 text-right font-mono text-slate-600">{Math.round(rotation.y)}°</span></div>
-                                    <div className="flex items-center gap-3 text-xs"><span className="w-3 font-bold text-slate-400">Z</span><input type="range" min="0" max="360" value={rotation.z} onChange={e => setRotation({...rotation, z: Number(e.target.value)})} className="flex-1 h-1.5 bg-slate-200 rounded-lg cursor-pointer accent-blue-600" /><span className="w-8 text-right font-mono text-slate-600">{rotation.z}°</span></div>
-                                    <button onClick={resetRotation} className="w-full text-xs bg-slate-50 hover:bg-slate-100 py-2 rounded-lg border border-slate-200 text-slate-600 font-medium transition-colors">Reset View</button>
-                                </div>
-                            </div>
-                            <div className="text-xs text-slate-500 space-y-1.5 text-right bg-white/90 backdrop-blur p-3 rounded-xl shadow-sm border border-slate-100 w-fit">
-                                <div className="font-bold mb-2 text-slate-700 uppercase tracking-wider text-[10px]">Legend</div>
-                                <div className="flex items-center justify-end gap-2">Outgoing Pass <span className="w-2 h-2 rounded-full bg-green-500"></span></div>
-                                <div className="flex items-center justify-end gap-2">Incoming Pass <span className="w-2 h-2 rounded-full bg-red-500"></span></div>
-                            </div>
-                        </div>
-                        )}
-
-                        {loading && <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 flex items-center justify-center"><div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-3"><div className="text-blue-600"><Icons.Loader /></div><span className="font-medium text-slate-700">Processing Data...</span></div></div>}
-
-                        {fetchError && (
-                            <div className="absolute inset-0 bg-slate-900/5 backdrop-blur-sm z-30 flex items-center justify-center p-4">
-                                <div className="flex flex-col items-center gap-4 p-8 bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-md text-center">
-                                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-500 mb-2"><Icons.AlertCircle /></div>
-                                    <div><h3 className="text-lg font-bold text-slate-900">Data Connection Blocked</h3><p className="text-sm text-slate-500 mt-1 leading-relaxed">Your network is preventing direct access to the dataset. Please upload the file <code className="mx-1 px-1.5 py-0.5 bg-slate-100 rounded text-slate-700 font-mono text-xs">all_players_pass_data_{selectedYear}.csv</code> manually.</p></div>
-                                    <div className="w-full pt-4 border-t border-slate-100"><FileUploadFallback onUpload={handlePassUpload} label="Upload CSV File" /></div>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="w-full h-full cursor-move active:cursor-grabbing">
-                            {graphData.nodes.length > 0 ? <svg ref={svgRef} viewBox="0 0 1000 800" className="w-full h-full outline-none"></svg> : !loading && !fetchError && <div className="flex items-center justify-center h-full text-slate-400 flex-col gap-3"><div className="p-4 bg-slate-50 rounded-full"><Icons.Network /></div><p className="font-medium">No data found for current filters.</p></div>}
-                        </div>
-                    </div>
-                    
-                    {/* Player List & Stats */}
-                    {filteredPlayers.length > 0 && (
-                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                                <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wider">Rotation Players ({filteredPlayers.length})</h3>
-                                <div className="flex bg-white rounded-lg border border-slate-200 p-1">
-                                    <button onClick={() => setStatsViewMode('avg')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${statsViewMode === 'avg' ? 'bg-blue-50 text-blue-600' : 'text-slate-500'}`}>Per Game</button>
-                                    <button onClick={() => setStatsViewMode('total')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${statsViewMode === 'total' ? 'bg-blue-50 text-blue-600' : 'text-slate-500'}`}>Totals</button>
-                                </div>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase">
-                                        <tr>
-                                            <th className="px-6 py-3 border-b border-slate-200 w-10">Show</th>
-                                            <th className="px-6 py-3 border-b border-slate-200">Player</th>
-                                            <th className="px-6 py-3 border-b border-slate-200 text-right">GP</th>
-                                            <th className="px-6 py-3 border-b border-slate-200 text-right">MIN</th>
-                                            <th className="px-6 py-3 border-b border-slate-200 text-right">PTS</th>
-                                            <th className="px-6 py-3 border-b border-slate-200 text-right">AST</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {filteredPlayers.map(p => {
-                                            const isExcluded = excludedPlayerIds.has(p.id);
-                                            return (
-                                                <tr key={p.id} className={`hover:bg-slate-50 transition-colors ${isExcluded ? 'opacity-50 bg-slate-50' : ''}`}>
-                                                    <td className="px-6 py-3">
-                                                        <input 
-                                                            type="checkbox" 
-                                                            checked={!isExcluded}
-                                                            onChange={() => {
-                                                                const newSet = new Set(excludedPlayerIds);
-                                                                if (newSet.has(p.id)) newSet.delete(p.id);
-                                                                else newSet.add(p.id);
-                                                                setExcludedPlayerIds(newSet);
-                                                            }}
-                                                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
-                                                        />
-                                                    </td>
-                                                    <td className="px-6 py-3 font-medium text-slate-700 flex items-center gap-3">
-                                                        <img src={NBA_HEADSHOT_URL(p.id)} alt="" className="w-8 h-8 rounded-full bg-slate-200" onError={e => e.target.style.display = 'none'} />
-                                                        {p.name}
-                                                    </td>
-                                                    <td className="px-6 py-3 text-right font-mono text-slate-600">{p.gp}</td>
-                                                    <td className="px-6 py-3 text-right font-mono text-slate-600">{renderStatVal(p, 'min', statsViewMode === 'avg')}</td>
-                                                    <td className="px-6 py-3 text-right font-mono text-slate-600 font-bold">{renderStatVal(p, 'pts', statsViewMode === 'avg')}</td>
-                                                    <td className="px-6 py-3 text-right font-mono text-slate-600">{renderStatVal(p, 'ast', statsViewMode === 'avg')}</td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        };
-
-        window.NetworkVisualizer = NetworkVisualizer;
-    })();
-    </script>
-
-    <!-- Playground Component -->
-    <script type="text/babel">
-    (function() {
-        const { useState, useEffect, useMemo } = React;
-        const Icons = window.Icons;
-        const REPO_BASE = window.REPO_BASE;
-        const parseCSV = window.parseCSV;
-        const getSeasonString = window.getSeasonString;
-        const NBA_HEADSHOT_URL = window.NBA_HEADSHOT_URL;
-        const FileUploadFallback = window.FileUploadFallback;
-
-        const YEARS_RANGE = Array.from({ length: 10 }, (_, i) => 2015 + i);
-
-        const Playground = () => {
-            // Config
-            const NBA_TEAM_MAPPING = {
-                "Atlanta Hawks": "ATL", "Boston Celtics": "BOS", "Brooklyn Nets": "BKN", "Charlotte Hornets": "CHA", "Chicago Bulls": "CHI", "Cleveland Cavaliers": "CLE", "Dallas Mavericks": "DAL", "Denver Nuggets": "DEN", "Detroit Pistons": "DET", "Golden State Warriors": "GSW", "Houston Rockets": "HOU", "Indiana Pacers": "IND", "Los Angeles Clippers": "LAC", "Los Angeles Lakers": "LAL", "Memphis Grizzlies": "MEM", "Miami Heat": "MIA", "Milwaukee Bucks": "MIL", "Minnesota Timberwolves": "MIN", "New Orleans Pelicans": "NOP", "New York Knicks": "NYK", "Oklahoma City Thunder": "OKC", "Orlando Magic": "ORL", "Philadelphia 76ers": "PHI", "Phoenix Suns": "PHX", "Portland Trail Blazers": "POR", "Sacramento Kings": "SAC", "San Antonio Spurs": "SAS", "Toronto Raptors": "TOR", "Utah Jazz": "UTA", "Washington Wizards": "WAS",
-            };
-
-            const [selectedYear, setSelectedYear] = useState(2024);
-            const [selectedTeamName, setSelectedTeamName] = useState("Atlanta Hawks");
-            const [selectedType, setSelectedType] = useState("Regular Season");
-            const [viewMode, setViewMode] = useState("avg"); // avg | total
-            
-            // Date States
-            const [tempDateRange, setTempDateRange] = useState({ start: '', end: '' });
-            const [appliedDateRange, setAppliedDateRange] = useState({ start: '', end: '' });
-            const [seasonDateBounds, setSeasonDateBounds] = useState({ min: '', max: '' });
-
-            const [csvData, setCsvData] = useState(null);
-            const [loading, setLoading] = useState(false);
-            const [error, setError] = useState(null);
-
-            const statColumns = [
-                { label: "GP", key: "gp", format: (v) => v },
-                { label: "MIN", key: "min", format: (v) => v.toFixed(1) },
-                { label: "PTS", key: "pts", format: (v) => v.toFixed(1) },
-                { label: "FGM", key: "fgm", format: (v) => v.toFixed(1) },
-                { label: "FGA", key: "fga", format: (v) => v.toFixed(1) },
-                { label: "3PM", key: "fg3m", format: (v) => v.toFixed(1) },
-                { label: "3PA", key: "fg3a", format: (v) => v.toFixed(1) },
-                { label: "FTM", key: "ftm", format: (v) => v.toFixed(1) },
-                { label: "FTA", key: "fta", format: (v) => v.toFixed(1) },
-                { label: "OREB", key: "oreb", format: (v) => v.toFixed(1) },
-                { label: "DREB", key: "dreb", format: (v) => v.toFixed(1) },
-                { label: "REB", key: "reb", format: (v) => v.toFixed(1) },
-                { label: "AST", key: "ast", format: (v) => v.toFixed(1) },
-                { label: "STL", key: "stl", format: (v) => v.toFixed(1) },
-                { label: "BLK", key: "blk", format: (v) => v.toFixed(1) },
-                { label: "TOV", key: "tov", format: (v) => v.toFixed(1) },
-                { label: "PF", key: "pf", format: (v) => v.toFixed(1) },
-                { label: "+/-", key: "plus_minus", format: (v) => v.toFixed(1) },
-            ];
-
-            const parseDateStr = (dateStr) => {
-                if (!dateStr) return null;
+                <!-- Top to Corners (Lob/Kick) -->
+                <path d="M200,20 Q100,100 120,170" class="net-link" stroke-opacity="0.3" />
+                <path d="M200,20 Q300,100 280,170" class="net-link" stroke-opacity="0.3" />
                 
-                // Clean quotes if present
-                dateStr = dateStr.replace(/"/g, '');
+                <!-- Post to Post -->
+                <path d="M120,170 Q200,190 280,170" class="net-link" marker-end="url(#arrow-glow)" />
+                <path d="M280,170 Q200,150 120,170" class="net-link" marker-end="url(#arrow-glow)" stroke-opacity="0.4" />
 
-                // Try standard ISO or simple format first
-                const t = Date.parse(dateStr);
-                if (!isNaN(t)) {
-                    const d = new Date(t);
-                    // Fix timezone off-by-one: use UTC methods since inputs usually parse to UTC 00:00
-                    return d.toISOString().split('T')[0];
-                }
+                <!-- Return Passes (Curved differently) -->
+                <path d="M80,80 Q120,40 200,20" class="net-link" stroke-dasharray="2,4" opacity="0.4" />
 
-                // Handle "DD-Mon-YY" e.g. "13-Apr-25"
-                const parts = dateStr.split('-');
-                if (parts.length === 3) {
-                    const [day, monthStr, yearStr] = parts;
-                    const months = { "Jan": 0, "Feb": 1, "Mar": 2, "Apr": 3, "May": 4, "Jun": 5, "Jul": 6, "Aug": 7, "Sep": 8, "Oct": 9, "Nov": 10, "Dec": 11 };
-                    const year = parseInt(yearStr) + 2000;
-                    const month = months[monthStr];
-                    if (month !== undefined) {
-                         // Construct UTC date to ensure string consistency
-                         const d = new Date(Date.UTC(year, month, parseInt(day)));
-                         return d.toISOString().split('T')[0];
-                    }
-                }
-                return null;
-            };
+            </svg>
+        </div>
 
-            const processData = (rawData) => {
-                const uniqueGameMap = new Map();
-                const processedRows = [];
-                
-                rawData.forEach(row => {
-                     const gameId = row.GAME_ID;
-                     const playerId = row.PLAYER_ID;
-                     const uniqueKey = `${gameId}_${playerId}`;
-                     
-                     if (uniqueGameMap.has(uniqueKey)) return; 
-                     uniqueGameMap.set(uniqueKey, true);
+        <!-- LAYER 3: Ball (Performance) -->
+        <div class="layer-ball">
+            <svg class="ball-svg" viewBox="0 0 100 100">
+                <defs>
+                    <radialGradient id="ballGrad" cx="30%" cy="30%" r="70%">
+                        <stop offset="0%" stop-color="#fdba74" />
+                        <stop offset="100%" stop-color="#c2410c" />
+                    </radialGradient>
+                </defs>
+                <circle cx="50" cy="50" r="48" fill="url(#ballGrad)" stroke="#7c2d12" stroke-width="1" />
+                <!-- Ball Lines -->
+                <path d="M50,2 Q95,50 50,98" fill="none" stroke="#431407" stroke-width="4" opacity="0.8" />
+                <path d="M2,50 Q50,95 98,50" fill="none" stroke="#431407" stroke-width="4" opacity="0.8" />
+                <path d="M85,15 Q20,50 85,85" fill="none" stroke="#431407" stroke-width="4" opacity="0.8" />
+            </svg>
+        </div>
 
-                     const isoDate = parseDateStr(row.GAME_DATE);
+        <!-- CLICKABLE LABEL ZONES (Overlay) -->
+        
+        <!-- 1. Performance (Top - Ball) -->
+        <a href="performance_analyzer.html" class="link-zone zone-perf">
+            <div class="label-btn">Performance Stats</div>
+        </a>
 
-                     // Parse Team from MATCHUP (e.g. "NYK vs. LAL" -> "NYK")
-                     let realAbbr = "";
-                     if (row.MATCHUP) {
-                         const matchParts = row.MATCHUP.split(' ');
-                         if (matchParts.length > 0) realAbbr = matchParts[0];
-                     }
+        <!-- 2. Network (Middle - Graph) -->
+        <a href="network_visualizer.html" class="link-zone zone-net">
+            <div class="label-btn">Network Builder</div>
+        </a>
 
-                     processedRows.push({ ...row, isoDate, realAbbr });
-            });
-            
-            setCsvData(processedRows);
-            
-            const validDates = processedRows.map(r => r.isoDate).filter(d => d).sort();
-            if (validDates.length > 0) {
-                const min = validDates[0];
-                const max = validDates[validDates.length - 1];
-                setSeasonDateBounds({ min, max });
-                // Auto apply full season range on load
-                setTempDateRange({ start: min, end: max });
-                setAppliedDateRange({ start: min, end: max });
-            }
-        };
+        <!-- 3. Data (Bottom - Board) -->
+        <a href="data_explorer.html" class="link-zone zone-data">
+            <div class="label-btn">Data Explorer</div>
+        </a>
 
-        useEffect(() => {
-            const load = async () => {
-                setLoading(true);
-                setError(null);
-                try {
-                    const filename = `${getSeasonString(selectedYear)}_player_game_data.csv`;
-                    const url = `${REPO_BASE}/performance_player_pergame/${filename}`;
-                    const res = await fetch(url);
-                    if (!res.ok) throw new Error("Network block");
-                    const text = await res.text();
-                    const parsed = parseCSV(text);
-                    processData(parsed.data);
-                } catch (e) {
-                    console.warn("Fallback needed");
-                    setError(true);
-                } finally {
-                    setLoading(false);
-                }
-            };
-            load();
-        }, [selectedYear]);
+    </div>
 
-        const handleFileUpload = (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            setLoading(true);
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                try {
-                    const parsed = parseCSV(event.target.result);
-                    processData(parsed.data);
-                    setError(null);
-                } catch(err) { alert("Error parsing file"); } 
-                finally { setLoading(false); }
-            };
-            reader.readAsText(file);
-        };
-
-        const handleApplyFilter = () => {
-            setAppliedDateRange(tempDateRange);
-        };
-
-        const aggregatedData = useMemo(() => {
-            if (!csvData) return [];
-            
-            const targetAbbr = NBA_TEAM_MAPPING[selectedTeamName];
-            
-            const filtered = csvData.filter(row => {
-                if (targetAbbr && row.realAbbr !== targetAbbr) return false;
-                if (selectedType && row.SEASON_TYPE !== selectedType) return false;
-                if (appliedDateRange.start && row.isoDate < appliedDateRange.start) return false;
-                if (appliedDateRange.end && row.isoDate > appliedDateRange.end) return false;
-                return true;
-            });
-
-            const playerMap = new Map();
-            filtered.forEach(row => {
-                const pid = row.PLAYER_ID;
-                if (!playerMap.has(pid)) {
-                    playerMap.set(pid, {
-                        id: pid,
-                        name: row.PLAYER_NAME,
-                        gp: 0,
-                        min: 0, pts: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, ftm: 0, fta: 0, oreb: 0, dreb: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0, plus_minus: 0
-                    });
-                }
-                const p = playerMap.get(pid);
-                p.gp += 1;
-                p.min += parseFloat(row.MIN || 0);
-                p.pts += parseFloat(row.PTS || 0);
-                p.fgm += parseFloat(row.FGM || 0);
-                p.fga += parseFloat(row.FGA || 0);
-                p.fg3m += parseFloat(row.FG3M || 0);
-                p.fg3a += parseFloat(row.FG3A || 0);
-                p.ftm += parseFloat(row.FTM || 0);
-                p.fta += parseFloat(row.FTA || 0);
-                p.oreb += parseFloat(row.OREB || 0);
-                p.dreb += parseFloat(row.DREB || 0);
-                p.reb += parseFloat(row.REB || 0);
-                p.ast += parseFloat(row.AST || 0);
-                p.stl += parseFloat(row.STL || 0);
-                p.blk += parseFloat(row.BLK || 0);
-                p.tov += parseFloat(row.TOV || 0);
-                p.pf += parseFloat(row.PF || 0);
-                p.plus_minus += parseFloat(row.PLUS_MINUS || 0);
-            });
-
-            const result = Array.from(playerMap.values());
-
-            if (viewMode === 'avg') {
-                result.forEach(p => {
-                    if (p.gp > 0) {
-                         statColumns.forEach(col => {
-                             if (col.key !== 'gp') p[col.key] = p[col.key] / p.gp;
-                         });
-                    }
-                });
-            }
-            
-            return result.sort((a, b) => b.pts - a.pts); 
-        }, [csvData, selectedTeamName, selectedType, appliedDateRange, viewMode]);
-
-        return (
-            <div className="space-y-6 animate-fade-in">
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4">
-                    <div className="flex flex-wrap gap-4 items-end">
-                        <div className="w-32">
-                            <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">Season</label>
-                            <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className="block w-full border-slate-300 rounded-lg py-2 text-sm bg-slate-50">
-                                {YEARS_RANGE.map(y => <option key={y} value={y}>{y} ({getSeasonString(y)})</option>)}
-                            </select>
-                        </div>
-                        <div className="w-48">
-                            <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">Team</label>
-                            <select value={selectedTeamName} onChange={e => setSelectedTeamName(e.target.value)} className="block w-full border-slate-300 rounded-lg py-2 text-sm bg-slate-50">
-                                {Object.keys(NBA_TEAM_MAPPING).map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                        </div>
-                         <div className="w-40">
-                            <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">Type</label>
-                            <select value={selectedType} onChange={e => setSelectedType(e.target.value)} className="block w-full border-slate-300 rounded-lg py-2 text-sm bg-slate-50">
-                                <option value="Regular Season">Regular Season</option>
-                                <option value="Playoffs">Playoffs</option>
-                                <option value="PlayIn">Play-In</option>
-                            </select>
-                        </div>
-                        
-                        <div className="flex items-end gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                            <div className="w-36">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block px-1">From</label>
-                                <input type="date" value={tempDateRange.start} min={seasonDateBounds.min} max={seasonDateBounds.max} onChange={e => setTempDateRange({...tempDateRange, start: e.target.value})} className="block w-full border-slate-300 rounded-md text-xs py-1.5" />
-                            </div>
-                            <div className="w-36">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block px-1">To</label>
-                                <input type="date" value={tempDateRange.end} min={seasonDateBounds.min} max={seasonDateBounds.max} onChange={e => setTempDateRange({...tempDateRange, end: e.target.value})} className="block w-full border-slate-300 rounded-md text-xs py-1.5" />
-                            </div>
-                            <button onClick={handleApplyFilter} className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-md shadow-sm transition-colors" title="Apply Date Filter">
-                                <Icons.Filter />
-                            </button>
-                        </div>
-
-                        <div className="flex-1 flex justify-end">
-                            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-                                <button onClick={() => setViewMode('avg')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${viewMode === 'avg' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Per Game</button>
-                                <button onClick={() => setViewMode('total')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${viewMode === 'total' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Totals</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {loading && <div className="text-center py-12 text-slate-500 flex flex-col items-center gap-2"><Icons.Loader /> Processing Stats...</div>}
-
-                {error && (
-                     <div className="p-6 bg-red-50 border border-red-100 rounded-xl text-center">
-                        <div className="text-red-500 mb-2 flex justify-center"><Icons.AlertCircle /></div>
-                        <h3 className="font-bold text-red-800">Data Unavailable</h3>
-                        <p className="text-sm text-red-600 mb-4">Network restriction prevented loading data.</p>
-                        <div className="inline-block"><FileUploadFallback onUpload={handleFileUpload} /></div>
-                    </div>
-                )}
-
-                {!loading && !error && (
-                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                        <div className="overflow-x-auto custom-scrollbar">
-                            <table className="w-full text-sm text-left whitespace-nowrap">
-                                <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold sticky top-0">
-                                    <tr>
-                                        <th className="px-6 py-4 border-b border-slate-200 min-w-[150px]">Player</th>
-                                        {statColumns.map(col => (
-                                            <th key={col.key} className={`px-4 py-4 border-b border-slate-200 text-right ${col.key === 'pts' ? 'bg-blue-50 text-blue-700' : ''}`}>{col.label} {col.key === 'pts' ? '↓' : ''}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {aggregatedData.map(p => (
-                                        <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
-                                            <td className="px-6 py-3 flex items-center gap-3">
-                                                <img src={NBA_HEADSHOT_URL(p.id)} alt="" className="w-8 h-8 rounded-full bg-slate-100 object-cover" onError={(e) => e.target.style.display = 'none'} />
-                                                <span className="font-medium text-slate-700">{p.name}</span>
-                                            </td>
-                                            {statColumns.map(col => (
-                                                <td key={col.key} className={`px-4 py-3 text-right font-mono text-slate-600 ${col.key === 'pts' ? 'font-bold text-slate-800 bg-blue-50/30' : ''}`}>
-                                                    {col.format(p[col.key])}
-                                                </td>
-                                            ))}
-                                        </tr>
-                                    ))}
-                                    {aggregatedData.length === 0 && (
-                                        <tr><td colSpan={statColumns.length + 1} className="px-6 py-12 text-center text-slate-400 flex flex-col items-center gap-2"><Icons.Calculator /><span className="block">No player data found for selected filters.</span></td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div className="bg-slate-50 px-4 py-2 border-t border-slate-200 text-xs text-slate-500 text-right">
-                            Date Filter: {appliedDateRange.start || 'Start'} to {appliedDateRange.end || 'End'}
-                            <span className="mx-2">•</span>
-                            Showing {aggregatedData.length} players
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
-    };
-
-    window.Playground = Playground;
-})();
-    </script>
-
-    <!-- 3. Application Entry -->
-    <script type="text/babel">
-        const { useState } = React;
-        const { createRoot } = ReactDOM;
-        const Icons = window.Icons;
-
-        const App = () => {
-            const [activeTab, setActiveTab] = useState('explorer');
-            const DataExplorer = window.DataExplorer;
-            const NetworkVisualizer = window.NetworkVisualizer;
-            const Playground = window.Playground;
-
-            return (
-                <div className="min-h-screen flex flex-col font-sans text-slate-800">
-                    {/* Navigation Bar */}
-                    <div className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-50 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-                        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2.5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-xl shadow-md shadow-blue-200">
-                                    <Icons.Database />
-                                </div>
-                                <div>
-                                    <h1 className="text-xl font-bold text-slate-900 tracking-tight">NBA Analytics Hub</h1>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Passing Network & Performance Metrics</p>
-                                </div>
-                            </div>
-                            
-                            <div className="flex bg-slate-100/80 p-1.5 rounded-xl border border-slate-200 backdrop-blur-sm">
-                                <button 
-                                    onClick={() => setActiveTab('explorer')} 
-                                    className={`px-4 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center gap-2.5 ${activeTab === 'explorer' ? 'bg-white text-blue-600 shadow-sm scale-[1.02]' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
-                                >
-                                    <Icons.FileText /> Data Explorer
-                                </button>
-                                <button 
-                                    onClick={() => setActiveTab('network')} 
-                                    className={`px-4 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center gap-2.5 ${activeTab === 'network' ? 'bg-white text-blue-600 shadow-sm scale-[1.02]' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
-                                >
-                                    <Icons.Network /> Network Builder
-                                </button>
-                                <button 
-                                    onClick={() => setActiveTab('playground')} 
-                                    className={`px-4 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center gap-2.5 ${activeTab === 'playground' ? 'bg-white text-blue-600 shadow-sm scale-[1.02]' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
-                                >
-                                    <Icons.Calculator /> Performance Analyzer
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Main Content */}
-                    <div className="flex-1 bg-slate-50/50">
-                        <div className="max-w-7xl mx-auto p-6 md:p-8">
-                            {activeTab === 'explorer' && <DataExplorer />}
-                            {activeTab === 'network' && <NetworkVisualizer />}
-                            {activeTab === 'playground' && <Playground />}
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const root = createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
 </body>
 </html>
