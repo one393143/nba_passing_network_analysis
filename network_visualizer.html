@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Network Builder - NBA Analytics Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/d3@7.9.0/dist/d3.min.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+    </style>
+</head>
+<body class="text-slate-800">
+    <div id="root"></div>
+
+    <!-- Shared Config -->
+    <script type="text/babel">
+        window.Icons = {
+            Network: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
+            Loader: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>,
+            AlertCircle: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+            Upload: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+            Play: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>,
+            Stop: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>,
+            Rotate3D: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a9 9 0 1 0 9 9"></path><path d="M12 3v6"></path><path d="M21 12h-6"></path></svg>,
+            Home: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>,
+        };
+        window.REPO_BASE = "https://raw.githubusercontent.com/one393143/nba_passing_network_analysis/refs/heads/main/data";
+        window.NBA_HEADSHOT_URL = (id) => `https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png`;
+        window.getSeasonString = (year) => { const nextYear = (year + 1) % 100; return `${year}-${nextYear.toString().padStart(2, '0')}`; };
+        window.parseCSV = (text) => {
+            const lines = text.trim().split('\n');
+            if (lines.length === 0) return { headers: [], data: [] };
+            const parseLine = (line) => line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(val => val.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+            const headers = parseLine(lines[0]);
+            const data = [];
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i];
+                if (!line.trim()) continue;
+                const values = parseLine(line);
+                if (values.length >= headers.length) {
+                    const entry = {};
+                    headers.forEach((header, index) => { entry[header] = values[index] || ''; });
+                    data.push(entry);
+                }
+            }
+            return { headers, data };
+        };
+        window.parseDateStr = (dateStr) => {
+            if (!dateStr) return null;
+            dateStr = dateStr.replace(/"/g, '');
+            const t = Date.parse(dateStr);
+            if (!isNaN(t)) return new Date(t).toISOString().split('T')[0];
+            const parts = dateStr.split('-');
+            if (parts.length === 3) {
+                const [day, monthStr, yearStr] = parts;
+                const months = { "Jan": 0, "Feb": 1, "Mar": 2, "Apr": 3, "May": 4, "Jun": 5, "Jul": 6, "Aug": 7, "Sep": 8, "Oct": 9, "Nov": 10, "Dec": 11 };
+                const year = parseInt(yearStr) + 2000;
+                const month = months[monthStr];
+                if (month !== undefined) return new Date(Date.UTC(year, month, parseInt(day))).toISOString().split('T')[0];
+            }
+            return null;
+        };
+        window.FileUploadFallback = ({ onUpload, label = "Upload Data File" }) => (
+            <label className="inline-flex items-center px-4 py-2 border border-blue-200 shadow-sm text-sm font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">
+                <window.Icons.Upload />
+                <span className="ml-2">{label}</span>
+                <input type="file" className="hidden" accept=".csv,.json,.txt" onChange={onUpload} />
+            </label>
+        );
+    </script>
+
+    <!-- Network Visualizer Component & App -->
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+        const { createRoot } = ReactDOM;
+        const Icons = window.Icons;
+        const REPO_BASE = window.REPO_BASE;
+        const parseCSV = window.parseCSV;
+        const getSeasonString = window.getSeasonString;
+        const NBA_HEADSHOT_URL = window.NBA_HEADSHOT_URL;
+        const FileUploadFallback = window.FileUploadFallback;
+        const parseDateStr = window.parseDateStr;
+
+        const YEARS_RANGE = Array.from({ length: 10 }, (_, i) => 2015 + i);
+
+        const NBA_TEAM_MAPPING = {
+            "Atlanta Hawks": "ATL", "Boston Celtics": "BOS", "Brooklyn Nets": "BKN", "Charlotte Hornets": "CHA", "Chicago Bulls": "CHI", "Cleveland Cavaliers": "CLE", "Dallas Mavericks": "DAL", "Denver Nuggets": "DEN", "Detroit Pistons": "DET", "Golden State Warriors": "GSW", "Houston Rockets": "HOU", "Indiana Pacers": "IND", "Los Angeles Clippers": "LAC", "Los Angeles Lakers": "LAL", "Memphis Grizzlies": "MEM", "Miami Heat": "MIA", "Milwaukee Bucks": "MIL", "Minnesota Timberwolves": "MIN", "New Orleans Pelicans": "NOP", "New York Knicks": "NYK", "Oklahoma City Thunder": "OKC", "Orlando Magic": "ORL", "Philadelphia 76ers": "PHI", "Phoenix Suns": "PHX", "Portland Trail Blazers": "POR", "Sacramento Kings": "SAC", "San Antonio Spurs": "SAS", "Toronto Raptors": "TOR", "Utah Jazz": "UTA", "Washington Wizards": "WAS",
+        };
+
+        const detectCommunities = (nodes, links) => {
+            if (nodes.length === 0) return;
+            const nodeIndex = new Map(nodes.map((n, i) => [n.id, i]));
+            const adj = Array.from({length: nodes.length}, () => []);
+            links.forEach(l => {
+                const s = nodeIndex.get(l.source.id);
+                const t = nodeIndex.get(l.target.id);
+                const w = l.weight || 1;
+                if(s !== undefined && t !== undefined) {
+                    adj[s].push({target: t, weight: w});
+                    adj[t].push({target: s, weight: w});
+                }
+            });
+            let communities = nodes.map((_, i) => i);
+            let improved = true;
+            let iter = 0;
+            while (improved && iter < 20) {
+                improved = false;
+                const order = d3.shuffle(d3.range(nodes.length));
+                order.forEach(u => {
+                    const scores = {};
+                    adj[u].forEach(edge => { const c = communities[edge.target]; scores[c] = (scores[c] || 0) + edge.weight; });
+                    let bestC = communities[u];
+                    let maxScore = scores[bestC] || 0;
+                    Object.entries(scores).forEach(([cStr, score]) => { const c = parseInt(cStr); if (score > maxScore) { maxScore = score; bestC = c; } });
+                    if (bestC !== communities[u]) { communities[u] = bestC; improved = true; }
+                });
+                iter++;
+            }
+            const uniqueLabels = [...new Set(communities)];
+            nodes.forEach((n, i) => { n.group = uniqueLabels.indexOf(communities[i]); });
+        };
+
+        const NetworkVisualizer = () => {
+            const [selectedYear, setSelectedYear] = useState(2024);
+            const [loading, setLoading] = useState(false);
+            const [fetchError, setFetchError] = useState(false);
+            const [passData, setPassData] = useState([]);
+            const [perfData, setPerfData] = useState([]);
+            const [teams, setTeams] = useState([]);
+            const [selectedTeamId, setSelectedTeamId] = useState('');
+            const [dateRange, setDateRange] = useState({start: '', end: ''});
+            const [minMaxDate, setMinMaxDate] = useState({min: '', max: ''});
+            const [filters, setFilters] = useState({ minGP: 1, minMPG: 0, topN: 15 });
+            const [excludedPlayerIds, setExcludedPlayerIds] = useState(new Set());
+            const [isPreviewMode, setIsPreviewMode] = useState(false);
+            const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
+            const [autoRotate, setAutoRotate] = useState(false);
+            const [statsViewMode, setStatsViewMode] = useState('avg');
+            const [view2D, setView2D] = useState(false);
+            const [layoutType, setLayoutType] = useState('force');
+            const [clustering, setClustering] = useState(false);
+            const svgRef = useRef(null);
+
+            const formatName = (lastFirst) => {
+                if (!lastFirst) return "Unknown";
+                const parts = lastFirst.split(',');
+                if (parts.length === 2) return `${parts[1].trim()} ${parts[0].trim()}`;
+                return lastFirst;
+            };
+
+            useEffect(() => {
+                const loadAllData = async () => {
+                    setLoading(true);
+                    setFetchError(false);
+                    setPassData([]);
+                    setPerfData([]);
+                    try {
+                        const passRes = await fetch(`${REPO_BASE}/passes_pergame/all_players_pass_data_${selectedYear}.csv`);
+                        if (!passRes.ok) throw new Error('Pass data block');
+                        const passText = await passRes.text();
+                        const parsedPass = parseCSV(passText);
+                        
+                        const uniqueTeams = new Map();
+                        const processedPassRows = [];
+                        parsedPass.data.forEach(row => {
+                            if (row.TEAM_ID && row.TEAM_NAME) uniqueTeams.set(row.TEAM_ID, row.TEAM_NAME);
+                            processedPassRows.push({ ...row, isoDate: parseDateStr(row.GAME_DATE) });
+                        });
+                        setPassData(processedPassRows);
+
+                        const teamList = Array.from(uniqueTeams.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+                        setTeams(teamList);
+                        if (teamList.length > 0 && !selectedTeamId) setSelectedTeamId(teamList[0].id);
+
+                        const isoDates = processedPassRows.map(r => r.isoDate).filter(Boolean).sort();
+                        if (isoDates.length > 0) {
+                            const minD = new Date(isoDates[0]); minD.setMonth(minD.getMonth() - 1);
+                            const maxD = new Date(isoDates[isoDates.length - 1]); maxD.setMonth(maxD.getMonth() + 1);
+                            const bufMin = minD.toISOString().split('T')[0];
+                            const bufMax = maxD.toISOString().split('T')[0];
+                            setMinMaxDate({ min: bufMin, max: bufMax });
+                            setDateRange({ start: bufMin, end: bufMax });
+                        }
+
+                        const perfRes = await fetch(`${REPO_BASE}/performance_player_pergame/${getSeasonString(selectedYear)}_player_game_data.csv`);
+                        if (!perfRes.ok) throw new Error('Perf data block');
+                        const perfText = await perfRes.text();
+                        const parsedPerf = parseCSV(perfText);
+                        const processedPerfRows = [];
+                        parsedPerf.data.forEach(row => {
+                            const gameId = row.GAME_ID || row.Game_ID;
+                            const playerId = row.PLAYER_ID || row.Player_ID;
+                            if (!gameId || !playerId) return;
+                            let realAbbr = "";
+                            if (row.MATCHUP) { const matchParts = row.MATCHUP.split(' '); if (matchParts.length > 0) realAbbr = matchParts[0]; }
+                            processedPerfRows.push({ ...row, isoDate: parseDateStr(row.GAME_DATE), realAbbr, PLAYER_ID: playerId, PLAYER_NAME: row.PLAYER_NAME || row.Player_Name, GAME_ID: gameId });
+                        });
+                        setPerfData(processedPerfRows);
+                    } catch (e) { console.warn("Auto-load failed.", e); setFetchError(true); } 
+                    finally { setLoading(false); }
+                };
+                loadAllData();
+            }, [selectedYear]);
+
+            const handlePassUpload = (e) => { 
+                const file = e.target.files?.[0]; if (!file) return;
+                setLoading(true);
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const parsed = parseCSV(event.target?.result);
+                        if(parsed.data && parsed.data.length > 0) {
+                             const uniqueTeams = new Map();
+                             const processedPassRows = [];
+                             parsed.data.forEach(row => {
+                                if (row.TEAM_ID && row.TEAM_NAME) uniqueTeams.set(row.TEAM_ID, row.TEAM_NAME);
+                                processedPassRows.push({ ...row, isoDate: parseDateStr(row.GAME_DATE) });
+                             });
+                             setPassData(processedPassRows);
+                             const teamList = Array.from(uniqueTeams.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+                             setTeams(teamList);
+                             if (teamList.length > 0 && !selectedTeamId) setSelectedTeamId(teamList[0].id);
+                             setFetchError(false);
+                        }
+                    } catch(err) { alert("Failed to parse file"); } finally { setLoading(false); }
+                };
+                reader.readAsText(file);
+            };
+
+            const filteredPlayers = useMemo(() => {
+                if (!selectedTeamId || perfData.length === 0) return [];
+                const selectedTeamName = teams.find(t => t.id === selectedTeamId)?.name;
+                const targetAbbr = NBA_TEAM_MAPPING[selectedTeamName];
+                const uniqueGameMap = new Map();
+                const playerAgg = new Map();
+                perfData.forEach(row => {
+                    if (targetAbbr && row.realAbbr !== targetAbbr) return;
+                    if (dateRange.start && row.isoDate < dateRange.start) return;
+                    if (dateRange.end && row.isoDate > dateRange.end) return;
+                    const uniqueKey = `${row.GAME_ID}_${row.PLAYER_ID}`;
+                    if (uniqueGameMap.has(uniqueKey)) return;
+                    uniqueGameMap.set(uniqueKey, true);
+                    const pid = row.PLAYER_ID;
+                    if (!playerAgg.has(pid)) playerAgg.set(pid, { id: pid, name: row.PLAYER_NAME, gp: 0, min: 0, pts: 0, ast: 0 });
+                    const p = playerAgg.get(pid);
+                    p.gp += 1; p.min += parseFloat(row.MIN || 0); p.pts += parseFloat(row.PTS || 0); p.ast += parseFloat(row.AST || 0);
+                });
+                let result = Array.from(playerAgg.values());
+                result = result.filter(p => p.gp >= filters.minGP);
+                result = result.filter(p => (p.min / p.gp) >= filters.minMPG);
+                result.sort((a, b) => (b.min / b.gp) - (a.min / a.gp));
+                return result.slice(0, filters.topN);
+            }, [perfData, selectedTeamId, dateRange, filters, teams]);
+
+            const graphData = useMemo(() => {
+                if (!selectedTeamId || passData.length === 0) return { nodes: [], links: [] };
+                const hasPerfData = perfData.length > 0;
+                const allowedIds = hasPerfData ? new Set(filteredPlayers.map(p => p.id)) : null;
+                const filteredPasses = passData.filter(row => {
+                    if (row.TEAM_ID !== selectedTeamId) return false;
+                    if (dateRange.start && row.isoDate < dateRange.start) return false;
+                    if (dateRange.end && row.isoDate > dateRange.end) return false;
+                    return true;
+                });
+                const nodeMap = new Map();
+                const linkMap = new Map();
+                filteredPasses.forEach(row => {
+                    const sourceId = row.PLAYER_ID;
+                    const targetId = row.PASS_TEAMMATE_PLAYER_ID;
+                    if (hasPerfData && allowedIds && (!allowedIds.has(sourceId) || !allowedIds.has(targetId))) return;
+                    if (excludedPlayerIds.has(sourceId) || excludedPlayerIds.has(targetId)) return;
+                    const passes = parseInt(row.PASS || '0', 10);
+                    const assists = parseInt(row.AST || '0', 10);
+                    if (!nodeMap.has(sourceId)) nodeMap.set(sourceId, { id: sourceId, name: formatName(row.PLAYER_NAME_LAST_FIRST), assists: 0, z: (Math.random() - 0.5) * 400 });
+                    if (!nodeMap.has(targetId)) nodeMap.set(targetId, { id: targetId, name: formatName(row.PASS_TO), assists: 0, z: (Math.random() - 0.5) * 400 });
+                    nodeMap.get(sourceId).assists += assists;
+                    const linkKey = `${sourceId}->${targetId}`;
+                    if (!linkMap.has(linkKey)) linkMap.set(linkKey, { source: sourceId, target: targetId, weight: 0, assists: 0 });
+                    linkMap.get(linkKey).weight += passes;
+                    linkMap.get(linkKey).assists += assists;
+                });
+                return { nodes: Array.from(nodeMap.values()), links: Array.from(linkMap.values()).filter(l => l.weight > 0) };
+            }, [selectedTeamId, dateRange, passData, filteredPlayers, perfData, excludedPlayerIds]);
+
+            useEffect(() => {
+                if (clustering) detectCommunities(graphData.nodes, graphData.links);
+                else graphData.nodes.forEach(n => delete n.group);
+            }, [graphData, clustering]);
+
+            const project3D = (x, y, z, angleX, angleY, angleZ, centerX, centerY) => {
+                const radX = angleX * Math.PI / 180; const radY = angleY * Math.PI / 180; const radZ = angleZ * Math.PI / 180;
+                let x1 = x * Math.cos(radY) - z * Math.sin(radY); let z1 = z * Math.cos(radY) + x * Math.sin(radY);
+                let y1 = y * Math.cos(radX) - z1 * Math.sin(radX); let z2 = z1 * Math.cos(radX) + y * Math.sin(radX);
+                let x2 = x1 * Math.cos(radZ) - y1 * Math.sin(radZ); let y2 = y1 * Math.cos(radZ) + x1 * Math.sin(radZ);
+                const focalLength = 1000; const scale = focalLength / (focalLength + z2);
+                return { x: x2 * scale + centerX, y: y2 * scale + centerY, scale: scale, depth: z2 };
+            };
+
+            useEffect(() => {
+                if (!svgRef.current || graphData.nodes.length === 0) return;
+                const width = 1000; const height = 800;
+                const svg = d3.select(svgRef.current);
+                svg.selectAll("*").remove();
+                let selectedNodeId = null;
+
+                const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+                const getNodeColor = (d) => (clustering && d.group !== undefined) ? colorScale(d.group) : (view2D ? "#3b82f6" : "#60a5fa");
+
+                const defs = svg.append("defs");
+                defs.append("marker").attr("id", "arrow-normal").attr("viewBox", "0 -5 10 10").attr("refX", 24).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto").append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", "#9ca3af");
+                defs.append("marker").attr("id", "arrow-out").attr("viewBox", "0 -5 10 10").attr("refX", 24).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto").append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", "#22c55e");
+                defs.append("marker").attr("id", "arrow-in").attr("viewBox", "0 -5 10 10").attr("refX", 24).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto").append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", "#ef4444");
+                
+                const gradient = defs.append("radialGradient").attr("id", "sphere-shine").attr("cx", "35%").attr("cy", "35%").attr("r", "60%").attr("fx", "30%").attr("fy", "30%");
+                gradient.append("stop").attr("offset", "0%").attr("stop-color", "#fff").attr("stop-opacity", 0.4);
+                gradient.append("stop").attr("offset", "100%").attr("stop-color", "#000").attr("stop-opacity", 0.4);
+                defs.append("filter").attr("id", "blur-shadow").append("feGaussianBlur").attr("stdDeviation", 8);
+                
+                if (isPreviewMode) {
+                    graphData.nodes.forEach(node => defs.append("clipPath").attr("id", `clip-${node.id}`).append("circle").attr("r", 35).attr("cx", 0).attr("cy", 0));
+                }
+
+                const zoomGroup = svg.append("g");
+                zoomGroup.append("rect").attr("x", -width * 2).attr("y", -height * 2).attr("width", width * 4).attr("height", height * 4).attr("fill", "transparent").on("click", () => { selectedNodeId = null; updateHighlights(); });
+                if (!isPreviewMode) {
+                    const zoom = d3.zoom().scaleExtent([0.5, 3]).on("zoom", (e) => zoomGroup.attr("transform", e.transform));
+                    svg.call(zoom);
+                }
+
+                const container = zoomGroup.append("g").attr("transform", `translate(${width/2}, ${height/2})`);
+                let gridSelection, shadowSelection;
+                if (!view2D) {
+                    const gridLines = []; const gridSize = 1200; const gridStep = 150; const gridY = 400; 
+                    for (let i = -gridSize; i <= gridSize; i += gridStep) {
+                        gridLines.push({ x1: -gridSize, y1: gridY, z1: i, x2: gridSize, y2: gridY, z2: i });
+                        gridLines.push({ x1: i, y1: gridY, z1: -gridSize, x2: i, y2: gridY, z2: gridSize });
+                    }
+                    gridSelection = container.append("g").attr("class", "grid-group").selectAll("path").data(gridLines).enter().append("path").attr("stroke", "#94a3b8").attr("stroke-width", 1).attr("fill", "none");
+                    shadowSelection = container.append("g").attr("class", "shadow-group").selectAll("ellipse").data(graphData.nodes).enter().append("ellipse").attr("fill", "#000").attr("opacity", 0.2).attr("filter", "url(#blur-shadow)");
+                }
+
+                let linkSelection = container.append("g").attr("class", "link-group").selectAll("g").data(graphData.links).enter().append("g");
+                const linkPath = linkSelection.append("path").attr("class", "link").attr("fill", "none").attr("stroke", isPreviewMode ? "#ccc" : "#9ca3af").attr("stroke-opacity", isPreviewMode ? 0.1 : 0.2).attr("marker-end", isPreviewMode ? null : "url(#arrow-normal)");
+                
+                let linkText;
+                if (!isPreviewMode) {
+                    linkText = linkSelection.append("text").attr("text-anchor", "middle").style("font-size", "10px").style("fill", "#4b5563").style("font-weight", "bold").style("opacity", 0).text((d) => `${d.weight} P / ${d.assists} A`);
+                }
+
+                const updateHighlights = () => {
+                    if (!selectedNodeId) {
+                         d3.selectAll(".node-stat").style("opacity", 0);
+                         linkPath.attr("stroke", isPreviewMode ? "#ccc" : "#9ca3af").attr("stroke-opacity", isPreviewMode ? 0.1 : 0.2).attr("stroke-width", 1).attr("marker-end", isPreviewMode ? null : "url(#arrow-normal)");
+                         nodeSelection.style("opacity", 1);
+                         if(!isPreviewMode) {
+                             nodeSelection.select(".node-circle").attr("fill", d => getNodeColor(d)).attr("stroke", "#fff");
+                             d3.selectAll(".link-group text").style("opacity", 0);
+                         }
+                         return;
+                    }
+                    nodeSelection.style("opacity", (n) => {
+                         if (n.id === selectedNodeId) return 1;
+                         const isNeighbor = graphData.links.some((l) => (l.source.id === selectedNodeId && l.target.id === n.id) || (l.target.id === selectedNodeId && l.source.id === n.id));
+                         return isNeighbor ? 1 : 0.1;
+                    });
+                    nodeSelection.filter((d) => d.id === selectedNodeId).select(".node-stat").style("opacity", 1);
+                    nodeSelection.filter((d) => d.id !== selectedNodeId).select(".node-stat").style("opacity", 0);
+                    if (!isPreviewMode) {
+                        nodeSelection.filter((d) => d.id === selectedNodeId).select(".node-circle").attr("fill", "#fbbf24").attr("stroke", "#000");
+                        nodeSelection.filter((d) => d.id !== selectedNodeId).select(".node-circle").attr("fill", d => getNodeColor(d)).attr("stroke", "#fff");
+                    }
+                    linkPath.each(function(l) {
+                        const sel = d3.select(this);
+                        const textSel = !isPreviewMode ? d3.select(this.parentNode).select("text") : null;
+                        if (l.source.id === selectedNodeId) {
+                            sel.attr("stroke", "#22c55e").attr("stroke-opacity", 0.8).attr("stroke-width", 2).attr("marker-end", "url(#arrow-out)");
+                            if(textSel) { textSel.style("opacity", 1).style("fill", "#15803d"); }
+                        } else if (l.target.id === selectedNodeId) {
+                            sel.attr("stroke", "#ef4444").attr("stroke-opacity", 0.8).attr("stroke-width", 2).attr("marker-end", "url(#arrow-in)");
+                            if(textSel) { textSel.style("opacity", 1).style("fill", "#b91c1c"); }
+                        } else {
+                            sel.attr("stroke-opacity", 0.05);
+                            if(textSel) { textSel.style("opacity", 0); }
+                        }
+                    });
+                };
+
+                let nodeSelection = container.append("g").attr("class", "node-group").selectAll("g").data(graphData.nodes).enter().append("g").attr("class", "node");
+                if (isPreviewMode) {
+                     nodeSelection.append("circle").attr("r", 35).attr("fill", "#fff");
+                     nodeSelection.append("image").attr("xlink:href", (d) => NBA_HEADSHOT_URL(d.id)).attr("x", -35).attr("y", -35).attr("width", 70).attr("height", 70).attr("clip-path", (d) => `url(#clip-${d.id})`).style("cursor", "pointer").on("error", function() { d3.select(this).attr("visibility", "hidden"); });
+                     nodeSelection.append("circle").attr("r", 35).attr("fill", "url(#sphere-shine)").style("pointer-events", "none");
+                     nodeSelection.append("text").text((d) => d.name).attr("class", "node-label").attr("text-anchor", "middle").attr("dy", 50).style("font-size", "14px").style("font-weight", "bold").style("fill", "#1f2937").style("text-shadow", "2px 0 #fff, -2px 0 #fff, 0 2px #fff, 0 -2px #fff");
+                     nodeSelection.append("text").attr("class", "node-stat").text((d) => `Ast: ${d.assists}`).attr("text-anchor", "middle").attr("dy", 65).style("font-size", "12px").style("fill", "#dc2626").style("font-weight", "bold").style("opacity", 0);
+                     nodeSelection.on("click", function(e, d) { e.stopPropagation(); selectedNodeId = (selectedNodeId === d.id) ? null : d.id; updateHighlights(); });
+                } else {
+                    nodeSelection.append("circle").attr("class", "node-circle").attr("fill", d => getNodeColor(d)).attr("stroke", "#fff").attr("stroke-width", 2).style("cursor", "pointer");
+                    nodeSelection.append("text").attr("class", "node-label").text((d) => d.name).attr("text-anchor", "middle").attr("dominant-baseline", "middle").style("font-size", "12px").style("font-weight", "600").style("fill", "#1f2937").style("pointer-events", "none").style("text-shadow", "0px 0px 4px rgba(255,255,255,0.9)");
+                    nodeSelection.append("text").attr("class", "node-stat").text((d) => `Ast: ${d.assists}`).attr("text-anchor", "middle").style("font-size", "11px").style("fill", "#dc2626").style("font-weight", "bold").style("opacity", 0);
+                    nodeSelection.on("click", function(e, d) { e.stopPropagation(); selectedNodeId = (selectedNodeId === d.id) ? null : d.id; updateHighlights(); });
+                }
+
+                let ballSelection = container.append("g").attr("class", "balls-group").selectAll(".ball");
+                const maxAssists = d3.max(graphData.nodes, (d) => d.assists) || 1;
+                const nodeRadiusScale = d3.scaleLinear().domain([0, maxAssists]).range([15, 45]);
+                const linkWidthScale = d3.scaleLinear().domain([1, d3.max(graphData.links, (d) => d.weight) || 1]).range([1, 6]);
+                
+                let simulation = d3.forceSimulation(graphData.nodes)
+                    .force("link", d3.forceLink(graphData.links).id(d => d.id).distance(view2D ? 200 : 400))
+                    .force("charge", d3.forceManyBody().strength(view2D ? -200 : -400))
+                    .force("collide", d3.forceCollide().radius(50));
+
+                if (layoutType === 'circular') {
+                     simulation.force("charge", null).force("center", null).force("radial", d3.forceRadial(300, 0, 0).strength(0.8));
+                } else if (layoutType === 'grid') {
+                     simulation.force("link", null).force("charge", null);
+                     const cols = Math.ceil(Math.sqrt(graphData.nodes.length));
+                     const spacing = 150;
+                     graphData.nodes.forEach((d, i) => { d.fx = (i % cols) * spacing - (cols * spacing / 2); d.fy = Math.floor(i / cols) * spacing - (cols * spacing / 2); });
+                } else {
+                     if(graphData.nodes[0] && graphData.nodes[0].fx !== undefined && graphData.nodes[0].fx !== null) {
+                        graphData.nodes.forEach(d => { d.fx = null; d.fy = null; });
+                     }
+                     simulation.force("center", d3.forceCenter(0, 0));
+                }
+
+                let activeBalls = [];
+                let rotationY = rotation.y;
+                let lastTime = 0;
+
+                const renderFrame = (timestamp) => {
+                    if (autoRotate && !view2D) {
+                        const dt = timestamp - lastTime;
+                        if (lastTime > 0) rotationY = (rotationY + 0.05 * dt/16) % 360;
+                        lastTime = timestamp;
+                    } else { rotationY = rotation.y; lastTime = 0; }
+                    const rX = rotation.x, rZ = rotation.z;
+
+                    graphData.nodes.forEach((n) => { 
+                        if (view2D) { n.px = n.x; n.py = n.y; n.scale = 1; n.pz = 0; } 
+                        else { const proj = project3D(n.x || 0, n.y || 0, n.z, rX, rotationY, rZ, 0, 0); n.px = proj.x; n.py = proj.y; n.pz = proj.depth; n.scale = proj.scale; }
+                    });
+
+                    if (!view2D && gridSelection) {
+                         gridSelection.attr("d", (d) => {
+                            const p1 = project3D(d.x1, d.y1, d.z1, rX, rotationY, rZ, 0, 0);
+                            const p2 = project3D(d.x2, d.y2, d.z2, rX, rotationY, rZ, 0, 0);
+                            return `M${p1.x},${p1.y}L${p2.x},${p2.y}`;
+                        }).attr("stroke-opacity", (d) => { const p1 = project3D(d.x1, d.y1, d.z1, rX, rotationY, rZ, 0, 0); return Math.max(0.05, p1.scale * 0.2); });
+                        shadowSelection.attr("cx", (d) => project3D(d.x || 0, 400, d.z, rX, rotationY, rZ, 0, 0).x)
+                            .attr("cy", (d) => project3D(d.x || 0, 400, d.z, rX, rotationY, rZ, 0, 0).y)
+                            .attr("rx", (d) => nodeRadiusScale(d.assists) * project3D(d.x, 400, d.z, rX, rotationY, rZ, 0, 0).scale * 1.2)
+                            .attr("ry", (d) => nodeRadiusScale(d.assists) * project3D(d.x, 400, d.z, rX, rotationY, rZ, 0, 0).scale * 0.4);
+                    }
+
+                    if (!view2D) {
+                        nodeSelection.sort((a, b) => b.pz - a.pz);
+                        linkSelection.sort((a, b) => ((b.source.pz + b.target.pz) / 2) - ((a.source.pz + a.target.pz) / 2));
+                    }
+
+                    nodeSelection.attr("transform", (d) => `translate(${d.px},${d.py}) scale(${d.scale})`).style("filter", view2D ? "none" : (d) => `brightness(${0.7 + (d.scale * 0.4)})`);
+                    
+                    if (!isPreviewMode) {
+                        nodeSelection.select("circle").attr("r", (d) => nodeRadiusScale(d.assists));
+                        nodeSelection.select(".node-stat").attr("dy", (d) => nodeRadiusScale(d.assists) + 15);
+                    }
+
+                    linkSelection.select("path").attr("d", (d) => {
+                        const dx = d.target.px - d.source.px;
+                        const dy = d.target.py - d.source.py;
+                        const dr = view2D ? 0 : Math.sqrt(dx * dx + dy * dy) * 1.5; 
+                        d.pathCache = `M${d.source.px},${d.source.py}A${dr},${dr} 0 0,1 ${d.target.px},${d.target.py}`;
+                        return d.pathCache;
+                    }).attr("stroke-width", (d) => linkWidthScale(d.weight) * ((d.source.scale + d.target.scale)/2));
+
+                    if (!isPreviewMode && linkText) {
+                         linkText.attr("x", d => d.source.px + (d.target.px - d.source.px) * 0.25)
+                                 .attr("y", d => d.source.py + (d.target.py - d.source.py) * 0.25);
+                    }
+
+                    if (isPreviewMode) {
+                         graphData.links.forEach((link, i) => {
+                             if (Math.random() < (link.weight * 0.002)) {
+                                 const assistRatio = link.weight > 0 ? (link.assists / link.weight) : 0;
+                                 activeBalls.push({ linkIndex: i, t: 0, speed: 0.01 + Math.random() * 0.005, sourcePz: link.source.pz, targetPz: link.target.pz, isAssist: Math.random() < assistRatio });
+                             }
+                         });
+                         activeBalls.forEach(b => b.t += b.speed);
+                         activeBalls = activeBalls.filter(b => b.t < 1);
+                         ballSelection = container.select(".balls-group").selectAll(".ball").data(activeBalls);
+                         ballSelection.exit().remove();
+                         ballSelection.enter().append("circle").attr("class", "ball").attr("r", 5).attr("stroke", "rgba(0,0,0,0.5)").attr("stroke-width", 0.5).merge(ballSelection).attr("fill", (b) => b.isAssist ? "#22c55e" : "#f97316").attr("opacity", (b) => { if (!selectedNodeId) return 1; const link = graphData.links[b.linkIndex]; return (link.source.id === selectedNodeId || link.target.id === selectedNodeId) ? 1 : 0.05; }).attr("transform", (b) => {
+                                const link = graphData.links[b.linkIndex];
+                                const p0 = {x: link.source.px, y: link.source.py};
+                                const p2 = {x: link.target.px, y: link.target.py};
+                                let x, y;
+                                if (view2D) { x = (1 - b.t) * p0.x + b.t * p2.x; y = (1 - b.t) * p0.y + b.t * p2.y; } 
+                                else {
+                                    const dx = p2.x - p0.x, dy = p2.y - p0.y, dist = Math.sqrt(dx*dx + dy*dy);
+                                    const mx = (p0.x + p2.x)/2, my = (p0.y + p2.y)/2;
+                                    const perpX = -dy/dist, perpY = dx/dist, curveMag = dist * 0.3; 
+                                    const cx = mx + perpX * curveMag, cy = my + perpY * curveMag;
+                                    const t = b.t, invT = 1 - t;
+                                    x = (invT * invT * p0.x) + (2 * invT * t * cx) + (t * t * p2.x);
+                                    y = (invT * invT * p0.y) + (2 * invT * t * cy) + (t * t * p2.y);
+                                }
+                                const depth = (b.sourcePz * (1-b.t)) + (b.targetPz * b.t);
+                                const scale = view2D ? 1 : (1000 / (1000 + depth));
+                                return `translate(${x},${y}) scale(${scale})`;
+                            });
+                    }
+                };
+
+                const timer = d3.timer((elapsed) => { renderFrame(elapsed); });
+                return () => { timer.stop(); simulation.stop(); };
+            }, [graphData, rotation, autoRotate, isPreviewMode, view2D, layoutType, clustering]);
+
+            const resetRotation = () => { setRotation({ x: 0, y: 0, z: 0 }); setAutoRotate(false); };
+            const renderStatVal = (player, key, isAvg) => { const val = player[key]; return isAvg ? (val / (player.gp || 1)).toFixed(1) : val.toFixed(0); };
+
+            return (
+                <div className="max-w-7xl mx-auto p-6">
+                    <header className="mb-6 flex items-center justify-between">
+                        <div>
+                            <h1 className="text-2xl font-bold text-slate-900">Network Builder</h1>
+                            <p className="text-slate-500 text-sm">Visualize passing networks and cluster analysis.</p>
+                        </div>
+                        <a href="index.html" className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-sm transition-colors">
+                            <Icons.Home /> Home
+                        </a>
+                    </header>
+
+                    <div className="space-y-6">
+                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4">
+                             <div className="flex flex-wrap gap-4 items-end">
+                                <div className="w-40">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Season</label>
+                                    <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className="block w-full border-slate-300 rounded-lg shadow-sm py-2 px-3 border text-sm">
+                                        {YEARS_RANGE.map(y => <option key={y} value={y}>{y} ({getSeasonString(y)})</option>)}
+                                    </select>
+                                </div>
+                                <div className="flex-1 min-w-[200px]">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Team</label>
+                                    <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)} disabled={loading || teams.length === 0} className="block w-full border-slate-300 rounded-lg shadow-sm py-2 px-3 border text-sm disabled:bg-slate-100">
+                                        {teams.length === 0 && <option>Loading teams...</option>}
+                                        {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="w-36">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Start Date</label>
+                                    <input type="date" value={dateRange.start} min={minMaxDate.min} max={minMaxDate.max} onChange={e => setDateRange(prev => ({...prev, start: e.target.value}))} className="block w-full border-slate-300 rounded-lg shadow-sm py-2 px-3 border text-sm" />
+                                </div>
+                                <div className="w-36">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">End Date</label>
+                                    <input type="date" value={dateRange.end} min={minMaxDate.min} max={minMaxDate.max} onChange={e => setDateRange(prev => ({...prev, end: e.target.value}))} className="block w-full border-slate-300 rounded-lg shadow-sm py-2 px-3 border text-sm" />
+                                </div>
+                                
+                                <div className="flex-none">
+                                    <button onClick={() => setIsPreviewMode(!isPreviewMode)} className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm font-medium text-sm transition-colors ${isPreviewMode ? 'bg-red-100 text-red-700 border border-red-200 hover:bg-red-200' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
+                                        {isPreviewMode ? <><Icons.Stop /> Stop Animation</> : <><Icons.Play /> Preview 3D</>}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-4 pt-4 border-t border-slate-100">
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-slate-500 font-bold text-xs uppercase">Min GP:</span>
+                                    <input type="number" min="1" max="82" value={filters.minGP} onChange={e => setFilters(prev => ({...prev, minGP: parseInt(e.target.value)||1}))} className="w-16 border border-slate-300 rounded px-2 py-1 text-sm" />
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-slate-500 font-bold text-xs uppercase">Min MPG:</span>
+                                    <input type="number" min="0" max="48" value={filters.minMPG} onChange={e => setFilters(prev => ({...prev, minMPG: parseInt(e.target.value)||0}))} className="w-16 border border-slate-300 rounded px-2 py-1 text-sm" />
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-slate-500 font-bold text-xs uppercase">Top N:</span>
+                                    <input type="number" min="5" max="30" value={filters.topN} onChange={e => setFilters(prev => ({...prev, topN: parseInt(e.target.value)||15}))} className="w-16 border border-slate-300 rounded px-2 py-1 text-sm" />
+                                </div>
+                                {perfData.length === 0 && !loading && (
+                                    <span className="text-xs text-amber-600 flex items-center gap-1 bg-amber-50 px-2 py-1 rounded">
+                                        <Icons.AlertCircle /> Filters require performance data.
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 border border-slate-200 rounded-2xl shadow-inner h-[700px] relative overflow-hidden group">
+                             <div className="absolute top-6 left-6 z-10 pointer-events-none bg-white/80 backdrop-blur p-4 rounded-xl border border-slate-100 shadow-sm">
+                                <h3 className="text-lg font-bold text-slate-800">Passing Network {isPreviewMode && "(Live Preview)"}</h3>
+                                <p className="text-xs text-slate-500 mt-1 font-medium">{teams.find(t => t.id === selectedTeamId)?.name} | {graphData.nodes.length} Players | {graphData.links.length} Connections</p>
+                            </div>
+                            
+                            {!isPreviewMode && (
+                            <div className="absolute top-6 right-6 z-10 flex flex-col gap-4 items-end pointer-events-auto">
+                                <div className="bg-white/90 backdrop-blur p-4 rounded-xl shadow-sm border border-slate-200 w-64 transition-opacity hover:opacity-100 opacity-90">
+                                    <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+                                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">View Mode</span>
+                                        <div className="flex bg-slate-100 p-0.5 rounded-md">
+                                            <button onClick={() => setView2D(false)} className={`px-2 py-1 text-[10px] font-bold rounded-sm ${!view2D ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}>3D</button>
+                                            <button onClick={() => setView2D(true)} className={`px-2 py-1 text-[10px] font-bold rounded-sm ${view2D ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}>2D</button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="mb-3">
+                                        <span className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Layout</span>
+                                        <select value={layoutType} onChange={(e) => setLayoutType(e.target.value)} className="block w-full text-xs border-slate-300 rounded py-1">
+                                            <option value="force">Force Directed</option>
+                                            <option value="circular">Circular</option>
+                                            <option value="grid">Grid</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="mb-3 flex items-center justify-between">
+                                         <span className="text-xs font-bold text-slate-500 uppercase">Color by Cluster</span>
+                                         <button onClick={() => setClustering(!clustering)} className={`w-10 h-5 rounded-full transition-colors relative ${clustering ? 'bg-blue-600' : 'bg-slate-300'}`} >
+                                             <span className={`absolute top-1 left-1 bg-white w-3 h-3 rounded-full transition-transform ${clustering ? 'translate-x-5' : ''}`} />
+                                         </button>
+                                    </div>
+
+                                    {!view2D && (
+                                        <div className="pt-2 border-t border-slate-100 space-y-3">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider"><Icons.Rotate3D /> Rotation</div>
+                                                <button onClick={() => setAutoRotate(!autoRotate)} className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide transition-colors ${autoRotate ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{autoRotate ? 'Stop' : 'Auto'}</button>
+                                            </div>
+                                            <div className="flex items-center gap-3 text-xs"><span className="w-3 font-bold text-slate-400">X</span><input type="range" min="-90" max="90" value={rotation.x} onChange={e => setRotation({...rotation, x: Number(e.target.value)})} className="flex-1 h-1.5 bg-slate-200 rounded-lg cursor-pointer accent-blue-600" /></div>
+                                            <div className="flex items-center gap-3 text-xs"><span className="w-3 font-bold text-slate-400">Y</span><input type="range" min="0" max="360" value={rotation.y} onChange={e => setRotation({...rotation, y: Number(e.target.value)})} className="flex-1 h-1.5 bg-slate-200 rounded-lg cursor-pointer accent-blue-600" /></div>
+                                            <div className="flex items-center gap-3 text-xs"><span className="w-3 font-bold text-slate-400">Z</span><input type="range" min="0" max="360" value={rotation.z} onChange={e => setRotation({...rotation, z: Number(e.target.value)})} className="flex-1 h-1.5 bg-slate-200 rounded-lg cursor-pointer accent-blue-600" /></div>
+                                            <button onClick={resetRotation} className="w-full text-xs bg-slate-50 hover:bg-slate-100 py-2 rounded-lg border border-slate-200 text-slate-600 font-medium transition-colors">Reset View</button>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="text-xs text-slate-500 space-y-1.5 text-right bg-white/90 backdrop-blur p-3 rounded-xl shadow-sm border border-slate-100 w-fit">
+                                    <div className="font-bold mb-2 text-slate-700 uppercase tracking-wider text-[10px]">Legend</div>
+                                    <div className="flex items-center justify-end gap-2">Outgoing Pass <span className="w-2 h-2 rounded-full bg-green-500"></span></div>
+                                    <div className="flex items-center justify-end gap-2">Incoming Pass <span className="w-2 h-2 rounded-full bg-red-500"></span></div>
+                                </div>
+                            </div>
+                            )}
+
+                            {loading && <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 flex items-center justify-center"><div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-3"><div className="text-blue-600"><Icons.Loader /></div><span className="font-medium text-slate-700">Processing Data...</span></div></div>}
+
+                            {fetchError && (
+                                <div className="absolute inset-0 bg-slate-900/5 backdrop-blur-sm z-30 flex items-center justify-center p-4">
+                                    <div className="flex flex-col items-center gap-4 p-8 bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-md text-center">
+                                        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-500 mb-2"><Icons.AlertCircle /></div>
+                                        <div><h3 className="text-lg font-bold text-slate-900">Data Connection Blocked</h3><p className="text-sm text-slate-500 mt-1 leading-relaxed">Your network is preventing direct access to the dataset. Please upload the file <code className="mx-1 px-1.5 py-0.5 bg-slate-100 rounded text-slate-700 font-mono text-xs">all_players_pass_data_{selectedYear}.csv</code> manually.</p></div>
+                                        <div className="w-full pt-4 border-t border-slate-100"><FileUploadFallback onUpload={handlePassUpload} label="Upload CSV File" /></div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="w-full h-full cursor-move active:cursor-grabbing">
+                                {graphData.nodes.length > 0 ? <svg ref={svgRef} viewBox="0 0 1000 800" className="w-full h-full outline-none"></svg> : !loading && !fetchError && <div className="flex items-center justify-center h-full text-slate-400 flex-col gap-3"><div className="p-4 bg-slate-50 rounded-full"><Icons.Network /></div><p className="font-medium">No data found for current filters.</p></div>}
+                            </div>
+                        </div>
+                        
+                        {filteredPlayers.length > 0 && (
+                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wider">Rotation Players ({filteredPlayers.length})</h3>
+                                    <div className="flex bg-white rounded-lg border border-slate-200 p-1">
+                                        <button onClick={() => setStatsViewMode('avg')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${statsViewMode === 'avg' ? 'bg-blue-50 text-blue-600' : 'text-slate-500'}`}>Per Game</button>
+                                        <button onClick={() => setStatsViewMode('total')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${statsViewMode === 'total' ? 'bg-blue-50 text-blue-600' : 'text-slate-500'}`}>Totals</button>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase">
+                                            <tr>
+                                                <th className="px-6 py-3 border-b border-slate-200 w-10">Show</th>
+                                                <th className="px-6 py-3 border-b border-slate-200">Player</th>
+                                                {clustering && <th className="px-6 py-3 border-b border-slate-200 w-20 text-center">Group</th>}
+                                                <th className="px-6 py-3 border-b border-slate-200 text-right">GP</th>
+                                                <th className="px-6 py-3 border-b border-slate-200 text-right">MIN</th>
+                                                <th className="px-6 py-3 border-b border-slate-200 text-right">PTS</th>
+                                                <th className="px-6 py-3 border-b border-slate-200 text-right">AST</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {filteredPlayers.map(p => {
+                                                const isExcluded = excludedPlayerIds.has(p.id);
+                                                const node = graphData.nodes.find(n => n.id === p.id);
+                                                return (
+                                                    <tr key={p.id} className={`hover:bg-slate-50 transition-colors ${isExcluded ? 'opacity-50 bg-slate-50' : ''}`}>
+                                                        <td className="px-6 py-3">
+                                                            <input type="checkbox" checked={!isExcluded} onChange={() => { const newSet = new Set(excludedPlayerIds); if (newSet.has(p.id)) newSet.delete(p.id); else newSet.add(p.id); setExcludedPlayerIds(newSet); }} className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
+                                                        </td>
+                                                        <td className="px-6 py-3 font-medium text-slate-700 flex items-center gap-3">
+                                                            <img src={NBA_HEADSHOT_URL(p.id)} alt="" className="w-8 h-8 rounded-full bg-slate-200" onError={e => e.target.style.display = 'none'} />
+                                                            {p.name}
+                                                        </td>
+                                                        {clustering && <td className="px-6 py-3 text-center"><span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: node && node.group !== undefined ? d3.schemeCategory10[node.group % 10] : '#ccc' }}></span></td>}
+                                                        <td className="px-6 py-3 text-right font-mono text-slate-600">{p.gp}</td>
+                                                        <td className="px-6 py-3 text-right font-mono text-slate-600">{renderStatVal(p, 'min', statsViewMode === 'avg')}</td>
+                                                        <td className="px-6 py-3 text-right font-mono text-slate-600 font-bold">{renderStatVal(p, 'pts', statsViewMode === 'avg')}</td>
+                                                        <td className="px-6 py-3 text-right font-mono text-slate-600">{renderStatVal(p, 'ast', statsViewMode === 'avg')}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+        
+        const root = createRoot(document.getElementById('root'));
+        root.render(<NetworkVisualizer />);
+    </script>
+</body>
+</html>

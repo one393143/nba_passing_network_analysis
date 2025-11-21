@@ -1,0 +1,208 @@
+
+(function() {
+    const { useState, useEffect } = React;
+    const Icons = window.Icons;
+    const REPO_BASE = window.REPO_BASE;
+    const parseCSV = window.parseCSV;
+    const getSeasonString = window.getSeasonString;
+    const FileUploadFallback = window.FileUploadFallback;
+
+    const YEARS_RANGE = Array.from({ length: 10 }, (_, i) => 2015 + i);
+    const DATA_SOURCES = [
+        { id: 'passes_pergame', name: 'Passes Per Game (Yearly)', folder: 'passes_pergame', years: YEARS_RANGE, filename: (year) => `all_players_pass_data_${year}.csv` },
+        { id: 'performance_player_pergame', name: 'Player Game Performance (Yearly)', folder: 'performance_player_pergame', years: YEARS_RANGE, filename: (year) => `${getSeasonString(year)}_player_game_data.csv` },
+        { id: 'performance_player_season', name: 'Player Season Stats (Yearly)', folder: 'performance_player_season', years: YEARS_RANGE, filename: (year) => `${getSeasonString(year)}_all_players.csv` },
+        { id: 'team_game_stats', name: 'Team Game Stats (All Time)', folder: 'performance_team_pergame', years: [], filename: () => `all_seasons_all_games_team_stats.csv` },
+        { id: 'team_regular_season', name: 'Team Regular Season Stats (2015-2024)', folder: 'performance_team', years: [], filename: () => `nba_regular_season_stats_2015_to_2024.csv` },
+        { id: 'team_playoff', name: 'Team Playoff Stats (2015-2024)', folder: 'performance_team', years: [], filename: () => `nba_playoff_stats_2015_to_2024.csv` },
+        { id: 'team_standings', name: 'League Standings (2015-2024)', folder: 'performance_team', years: [], filename: () => `nba_league_standings_2015_to_2024.csv` },
+        { id: 'salary', name: 'Player Salaries', folder: 'players_detailed', years: [], filename: () => `salary from br.csv` }
+    ];
+
+    const DataExplorer = () => {
+        const [selectedSourceId, setSelectedSourceId] = useState(DATA_SOURCES[0].id);
+        const [selectedYear, setSelectedYear] = useState(DATA_SOURCES[0].years[0]);
+        const [urlInput, setUrlInput] = useState('');
+        const [csvData, setCsvData] = useState(null);
+        const [loading, setLoading] = useState(false);
+        const [error, setError] = useState(null);
+        const [currentPage, setCurrentPage] = useState(1);
+        const rowsPerPage = 50;
+
+        const currentSource = DATA_SOURCES.find(s => s.id === selectedSourceId) || DATA_SOURCES[0];
+        const isStaticSource = currentSource.years.length === 0;
+
+        useEffect(() => {
+            const filename = currentSource.filename(selectedYear);
+            const newUrl = `${REPO_BASE}/${currentSource.folder}/${encodeURIComponent(filename)}`;
+            setUrlInput(newUrl);
+            loadData(newUrl);
+        }, [selectedSourceId, selectedYear]);
+
+        const loadData = async (url) => {
+            if (!url.trim()) return;
+            try {
+                setLoading(true);
+                setError(null);
+                const response = await fetch(url.trim());
+                if (!response.ok) throw new Error(`Failed to fetch (${response.status}). Possible network restriction.`);
+                const text = await response.text();
+                const parsed = parseCSV(text);
+                if (parsed.headers.length === 0) throw new Error('Parsed data is empty.');
+                setCsvData(parsed);
+                setCurrentPage(1);
+            } catch (err) {
+                console.warn("Fetch failed, falling back to manual upload prompt:", err);
+                setError(err.message || 'Error loading CSV.');
+                setCsvData(null);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const handleFileUpload = (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            setLoading(true);
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const text = event.target?.result;
+                    const parsed = parseCSV(text);
+                    if (parsed.headers.length === 0) throw new Error('File is empty or invalid.');
+                    setCsvData(parsed);
+                    setError(null);
+                    setCurrentPage(1);
+                } catch(err) {
+                    setError("Failed to parse file: " + err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            reader.onerror = () => {
+                setError("Error reading file.");
+                setLoading(false);
+            }
+            reader.readAsText(file);
+        };
+
+        const totalPages = csvData ? Math.ceil(csvData.data.length / rowsPerPage) : 0;
+        const currentRows = csvData ? csvData.data.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage) : [];
+
+        return (
+            <div className="space-y-6 animate-fade-in">
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                        <div className="md:col-span-4 space-y-1">
+                            <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                                <Icons.FileText /> Dataset
+                            </label>
+                            <select 
+                                value={selectedSourceId} 
+                                onChange={(e) => {
+                                    const newSource = DATA_SOURCES.find(s => s.id === e.target.value);
+                                    setSelectedSourceId(e.target.value);
+                                    if (newSource && newSource.years.length > 0 && !newSource.years.includes(selectedYear)) {
+                                        setSelectedYear(newSource.years[0]);
+                                    }
+                                }}
+                                className="block w-full pl-3 pr-10 py-2 text-sm border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 rounded-lg bg-slate-50"
+                            >
+                                {DATA_SOURCES.map(source => <option key={source.id} value={source.id}>{source.name}</option>)}
+                            </select>
+                        </div>
+
+                        {!isStaticSource && (
+                            <div className="md:col-span-2 space-y-1">
+                                <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                                    <Icons.Calendar /> Season
+                                </label>
+                                <select 
+                                    value={selectedYear} 
+                                    onChange={(e) => setSelectedYear(Number(e.target.value))} 
+                                    className="block w-full pl-3 pr-10 py-2 text-sm border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 rounded-lg bg-slate-50"
+                                >
+                                    {currentSource.years.map(year => <option key={year} value={year}>{year} ({getSeasonString(year)})</option>)}
+                                </select>
+                            </div>
+                        )}
+
+                        <div className="md:col-span-6 space-y-1">
+                            <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                                <Icons.Link /> Source URL
+                            </label>
+                            <form onSubmit={(e) => { e.preventDefault(); loadData(urlInput); }} className="flex gap-2">
+                                <input 
+                                    type="text" 
+                                    value={urlInput} 
+                                    onChange={(e) => setUrlInput(e.target.value)} 
+                                    className="block w-full px-3 py-2 text-sm border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 rounded-lg bg-slate-50 text-slate-600 truncate"
+                                />
+                                <button 
+                                    type="submit" 
+                                    disabled={loading} 
+                                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 shadow-sm transition-colors"
+                                >
+                                    {loading ? 'Loading' : 'Load'}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                {loading && (
+                    <div className="flex justify-center py-16 text-slate-500">
+                        <div className="flex flex-col items-center gap-3">
+                            <Icons.Loader />
+                            <span className="text-sm font-medium">Retrieving data...</span>
+                        </div>
+                    </div>
+                )}
+                
+                {error && (
+                    <div className="p-6 bg-red-50 border border-red-100 rounded-xl flex flex-col md:flex-row gap-6 items-center justify-between">
+                        <div className="flex items-start gap-4">
+                            <div className="text-red-500 mt-0.5"><Icons.AlertCircle /></div>
+                            <div>
+                                <h3 className="text-sm font-bold text-red-800 mb-1">Connection Failed</h3>
+                                <p className="text-sm text-red-600">{error}</p>
+                                <p className="text-xs text-red-500 mt-2">If your network blocks GitHub Raw, please download the file manually and upload it here.</p>
+                            </div>
+                        </div>
+                        <FileUploadFallback onUpload={handleFileUpload} />
+                    </div>
+                )}
+
+                {csvData && !loading && !error && (
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                        <div className="overflow-auto custom-scrollbar max-h-[600px] w-full">
+                            <table className="w-full text-sm text-left whitespace-nowrap">
+                                <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 z-10 font-bold tracking-wider">
+                                    <tr>{csvData.headers.map((header, i) => <th key={i} className="px-6 py-4 border-b border-slate-200">{header}</th>)}</tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {currentRows.map((row, idx) => (
+                                        <tr key={idx} className="hover:bg-blue-50 transition-colors">
+                                            {csvData.headers.map((header, i) => <td key={i} className="px-6 py-3 text-slate-600">{row[header]}</td>)}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-sm text-slate-600">
+                            <span className="font-medium">Page {currentPage} of {totalPages}</span>
+                            <div className="flex gap-2">
+                                <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="px-4 py-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">Previous</button>
+                                <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="px-4 py-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">Next</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // Expose to Global
+    window.DataExplorer = DataExplorer;
+})();
