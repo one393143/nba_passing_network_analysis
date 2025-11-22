@@ -1,0 +1,864 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Sports Geo-Atlas (Standalone)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              slate: {
+                850: '#151f32',
+                900: '#0f172a',
+                950: '#020617',
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+            },
+            animation: {
+              slideUp: 'slideUp 0.3s ease-out',
+              fadeIn: 'fadeIn 0.5s ease-in',
+            },
+            keyframes: {
+              slideUp: {
+                '0%': { transform: 'translateY(100%)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              },
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- D3 & TopoJSON -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/topojson-client@3"></script>
+
+    <!-- Google GenAI SDK (Module) -->
+    <script type="module">
+        import { GoogleGenAI } from "https://esm.run/@google/genai";
+        window.GoogleGenAI = GoogleGenAI;
+    </script>
+
+    <style>
+      body { font-family: 'Inter', sans-serif; background-color: #020617; color: #e2e8f0; }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #0f172a; }
+      ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #475569; }
+      
+      /* Map Labels */
+      .map-label { 
+        text-shadow: 0 2px 4px rgba(0,0,0,0.9), 0 1px 2px rgba(0,0,0,1); 
+        pointer-events: none;
+        user-select: none;
+      }
+      
+      /* Jersey Number Style */
+      .jersey-num {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -1px;
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "d3": "https://aistudiocdn.com/d3@^7.9.0",
+    "topojson-client": "https://aistudiocdn.com/topojson-client@^3.1.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="h-screen w-screen overflow-hidden bg-slate-950">
+    <div id="root" class="h-full w-full"></div>
+
+    <!-- ========================================================================================== -->
+    <!-- ⚠️ IMPORTANT: API KEY CONFIGURATION                                                     -->
+    <!-- ========================================================================================== -->
+    <script>
+        window.process = {
+            env: {
+                // TODO: Replace 'YOUR_GEMINI_API_KEY_HERE' with your actual API key.
+                API_KEY: 'AIzaSyATOn421Sr2k8K_ohhXqqCvLjhEFcn0moE' 
+            }
+        };
+    </script>
+
+    <!-- ========================================================================================== -->
+    <!-- APPLICATION LOGIC                                                                          -->
+    <!-- ========================================================================================== -->
+    <script type="text/babel" data-presets="typescript,react">
+        const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+        // --- 1. CONSTANTS & DATA ---
+        const League = { NFL: 'NFL', NBA: 'NBA', MLB: 'MLB', NHL: 'NHL' };
+        
+        const CITIES = {
+            'Anaheim': { lat: 33.8366, lng: -117.9143 },
+            'Arizona': { lat: 33.4484, lng: -112.0740 },
+            'Atlanta': { lat: 33.7490, lng: -84.3880 },
+            'Baltimore': { lat: 39.2904, lng: -76.6122 },
+            'Boston': { lat: 42.3601, lng: -71.0589 },
+            'Brooklyn': { lat: 40.6782, lng: -73.9442 },
+            'Buffalo': { lat: 42.8864, lng: -78.8784 },
+            'Calgary': { lat: 51.0447, lng: -114.0719 },
+            'Carolina': { lat: 35.2271, lng: -80.8431 },
+            'Charlotte': { lat: 35.2271, lng: -80.8431 },
+            'Chicago': { lat: 41.8781, lng: -87.6298 },
+            'Cincinnati': { lat: 39.1031, lng: -84.5120 },
+            'Cleveland': { lat: 41.4993, lng: -81.6944 },
+            'Columbus': { lat: 39.9612, lng: -82.9988 },
+            'Dallas': { lat: 32.7767, lng: -96.7970 },
+            'Denver': { lat: 39.7392, lng: -104.9903 },
+            'Detroit': { lat: 42.3314, lng: -83.0458 },
+            'Edmonton': { lat: 53.5461, lng: -113.4938 },
+            'Foxborough': { lat: 42.0909, lng: -71.2643 },
+            'Green Bay': { lat: 44.5133, lng: -88.0133 },
+            'Houston': { lat: 29.7604, lng: -95.3698 },
+            'Indianapolis': { lat: 39.7684, lng: -86.1581 },
+            'Jacksonville': { lat: 30.3322, lng: -81.6557 },
+            'Kansas City': { lat: 39.0997, lng: -94.5786 },
+            'Las Vegas': { lat: 36.1699, lng: -115.1398 },
+            'Los Angeles': { lat: 34.0522, lng: -118.2437 },
+            'Memphis': { lat: 35.1495, lng: -90.0490 },
+            'Miami': { lat: 25.7617, lng: -80.1918 },
+            'Milwaukee': { lat: 43.0389, lng: -87.9065 },
+            'Minneapolis': { lat: 44.9778, lng: -93.2650 },
+            'Montreal': { lat: 45.5017, lng: -73.5673 },
+            'Nashville': { lat: 36.1627, lng: -86.7816 },
+            'New Orleans': { lat: 29.9511, lng: -90.0715 },
+            'New York': { lat: 40.7128, lng: -74.0060 },
+            'Newark': { lat: 40.7357, lng: -74.1724 },
+            'Oakland': { lat: 37.8044, lng: -122.2711 },
+            'Oklahoma City': { lat: 35.4676, lng: -97.5164 },
+            'Orlando': { lat: 28.5383, lng: -81.3792 },
+            'Ottawa': { lat: 45.4215, lng: -75.6972 },
+            'Philadelphia': { lat: 39.9526, lng: -75.1652 },
+            'Phoenix': { lat: 33.4484, lng: -112.0740 },
+            'Pittsburgh': { lat: 40.4406, lng: -79.9959 },
+            'Portland': { lat: 45.5152, lng: -122.6784 },
+            'Raleigh': { lat: 35.7796, lng: -78.6382 },
+            'Sacramento': { lat: 38.5816, lng: -121.4944 },
+            'Salt Lake City': { lat: 40.7608, lng: -111.8910 },
+            'San Antonio': { lat: 29.4241, lng: -98.4936 },
+            'San Diego': { lat: 32.7157, lng: -117.1611 },
+            'San Francisco': { lat: 37.7749, lng: -122.4194 },
+            'San Jose': { lat: 37.3382, lng: -121.8863 },
+            'Seattle': { lat: 47.6062, lng: -122.3321 },
+            'St. Louis': { lat: 38.6270, lng: -90.1994 },
+            'St. Paul': { lat: 44.9537, lng: -93.0900 },
+            'Sunrise': { lat: 26.1337, lng: -80.3094 },
+            'Tampa': { lat: 27.9506, lng: -82.4572 },
+            'Toronto': { lat: 43.6532, lng: -79.3832 },
+            'Vancouver': { lat: 49.2827, lng: -123.1207 },
+            'Washington': { lat: 38.9072, lng: -77.0369 },
+            'Winnipeg': { lat: 49.8951, lng: -97.1384 },
+        };
+
+        // --- 8 DISTINCT COLORS ---
+        const PALETTE = {
+            RED: '#ef4444',     // Red 500
+            ORANGE: '#f97316',  // Orange 500
+            YELLOW: '#facc15',  // Yellow 400 (Brighter)
+            LIME: '#84cc16',    // Lime 500
+            CYAN: '#06b6d4',    // Cyan 500
+            BLUE: '#3b82f6',    // Blue 500
+            PURPLE: '#d946ef',  // Fuschia 500 (More distinct than purple)
+            PINK: '#ec4899'     // Pink 500
+        };
+
+        // --- COLOR MAPPING ---
+        const DIVISION_COLOR_MAP = {
+            // NFL
+            'AFC East': PALETTE.CYAN, 'AFC North': PALETTE.ORANGE, 'AFC South': PALETTE.LIME, 'AFC West': PALETTE.RED,
+            'NFC East': PALETTE.BLUE, 'NFC North': PALETTE.PURPLE, 'NFC South': PALETTE.PINK, 'NFC West': PALETTE.YELLOW,
+            
+            // MLB
+            'AL East': PALETTE.BLUE, 'AL Central': PALETTE.YELLOW, 'AL West': PALETTE.PURPLE,
+            'NL East': PALETTE.CYAN, 'NL Central': PALETTE.PINK, 'NL West': PALETTE.ORANGE,
+
+            // NBA
+            'NBA Atlantic': PALETTE.LIME, 'NBA Central': PALETTE.BLUE, 'NBA Southeast': PALETTE.CYAN,
+            'NBA Northwest': PALETTE.PURPLE, 'NBA Pacific': PALETTE.ORANGE, 'NBA Southwest': PALETTE.RED,
+
+            // NHL
+            'NHL Atlantic': PALETTE.BLUE, 'NHL Metro': PALETTE.RED, 'NHL Central': PALETTE.LIME, 'NHL Pacific': PALETTE.ORANGE,
+        };
+
+        const getDivisionColor = (league, conference, division) => {
+            return DIVISION_COLOR_MAP[`${conference} ${division}`] || DIVISION_COLOR_MAP[`${league} ${division}`] || '#fff';
+        };
+
+        const getLogoUrl = (league, abbr) => {
+            const l = league.toLowerCase();
+            let t = abbr.toUpperCase();
+            const fixes = { 
+                NFL: { WSH: 'WAS' }, 
+                NBA: { UTA: 'UTAH', NOP: 'NO', PHX: 'PHX' }, 
+                MLB: { WSH: 'WSH', CWS: 'CHW' }, 
+                NHL: { UTA: 'UTAH' } 
+            };
+            if (fixes[league] && fixes[league][t]) t = fixes[league][t];
+            return `https://a.espncdn.com/combiner/i?img=/i/teamlogos/${l}/500/${t}.png&h=150&w=150`;
+        };
+
+        const createTeam = (league, name, cityKey, conf, div, pColor, sColor, abbr) => {
+            const city = CITIES[cityKey] || CITIES['New York'];
+            return {
+                id: `${league}-${abbr}`.toLowerCase(),
+                name, league, conference: conf, division: div,
+                lat: city.lat, lng: city.lng,
+                primaryColor: pColor, secondaryColor: sColor,
+                abbreviation: abbr, logoUrl: getLogoUrl(league, abbr)
+            };
+        };
+
+        const TEAMS = [
+            // NFL
+            createTeam(League.NFL, 'Buffalo Bills', 'Buffalo', 'AFC', 'East', '#00338D', '#C60C30', 'BUF'),
+            createTeam(League.NFL, 'Miami Dolphins', 'Miami', 'AFC', 'East', '#008E97', '#FC4C02', 'MIA'),
+            createTeam(League.NFL, 'New England Patriots', 'Foxborough', 'AFC', 'East', '#002244', '#C60C30', 'NE'),
+            createTeam(League.NFL, 'New York Jets', 'New York', 'AFC', 'East', '#125740', '#000000', 'NYJ'),
+            createTeam(League.NFL, 'Baltimore Ravens', 'Baltimore', 'AFC', 'North', '#241773', '#000000', 'BAL'),
+            createTeam(League.NFL, 'Cincinnati Bengals', 'Cincinnati', 'AFC', 'North', '#FB4F14', '#000000', 'CIN'),
+            createTeam(League.NFL, 'Cleveland Browns', 'Cleveland', 'AFC', 'North', '#311D00', '#FF3C00', 'CLE'),
+            createTeam(League.NFL, 'Pittsburgh Steelers', 'Pittsburgh', 'AFC', 'North', '#FFB612', '#101820', 'PIT'),
+            createTeam(League.NFL, 'Houston Texans', 'Houston', 'AFC', 'South', '#03202F', '#A71930', 'HOU'),
+            createTeam(League.NFL, 'Indianapolis Colts', 'Indianapolis', 'AFC', 'South', '#002C5F', '#A2AAAD', 'IND'),
+            createTeam(League.NFL, 'Jacksonville Jaguars', 'Jacksonville', 'AFC', 'South', '#006778', '#D7A22A', 'JAX'),
+            createTeam(League.NFL, 'Tennessee Titans', 'Nashville', 'AFC', 'South', '#0C2340', '#4B92DB', 'TEN'),
+            createTeam(League.NFL, 'Denver Broncos', 'Denver', 'AFC', 'West', '#FB4F14', '#002244', 'DEN'),
+            createTeam(League.NFL, 'Kansas City Chiefs', 'Kansas City', 'AFC', 'West', '#E31837', '#FFB81C', 'KC'),
+            createTeam(League.NFL, 'Las Vegas Raiders', 'Las Vegas', 'AFC', 'West', '#000000', '#A5ACAF', 'LV'),
+            createTeam(League.NFL, 'Los Angeles Chargers', 'Los Angeles', 'AFC', 'West', '#0080C6', '#FFC20E', 'LAC'),
+            createTeam(League.NFL, 'Dallas Cowboys', 'Dallas', 'NFC', 'East', '#041E42', '#869397', 'DAL'),
+            createTeam(League.NFL, 'New York Giants', 'New York', 'NFC', 'East', '#0B2265', '#A71930', 'NYG'),
+            createTeam(League.NFL, 'Philadelphia Eagles', 'Philadelphia', 'NFC', 'East', '#004C54', '#A5ACAF', 'PHI'),
+            createTeam(League.NFL, 'Washington Commanders', 'Washington', 'NFC', 'East', '#5A1414', '#FFB612', 'WSH'),
+            createTeam(League.NFL, 'Chicago Bears', 'Chicago', 'NFC', 'North', '#0B162A', '#C83803', 'CHI'),
+            createTeam(League.NFL, 'Detroit Lions', 'Detroit', 'NFC', 'North', '#0076B6', '#B0B7BC', 'DET'),
+            createTeam(League.NFL, 'Green Bay Packers', 'Green Bay', 'NFC', 'North', '#203731', '#FFB612', 'GB'),
+            createTeam(League.NFL, 'Minnesota Vikings', 'Minneapolis', 'NFC', 'North', '#4F2683', '#FFC62F', 'MIN'),
+            createTeam(League.NFL, 'Atlanta Falcons', 'Atlanta', 'NFC', 'South', '#A71930', '#000000', 'ATL'),
+            createTeam(League.NFL, 'Carolina Panthers', 'Charlotte', 'NFC', 'South', '#0085CA', '#101820', 'CAR'),
+            createTeam(League.NFL, 'New Orleans Saints', 'New Orleans', 'NFC', 'South', '#D3BC8D', '#101820', 'NO'),
+            createTeam(League.NFL, 'Tampa Bay Buccaneers', 'Tampa', 'NFC', 'South', '#D50A0A', '#FF7900', 'TB'),
+            createTeam(League.NFL, 'Arizona Cardinals', 'Arizona', 'NFC', 'West', '#97233F', '#000000', 'ARI'),
+            createTeam(League.NFL, 'Los Angeles Rams', 'Los Angeles', 'NFC', 'West', '#003594', '#FFA300', 'LAR'),
+            createTeam(League.NFL, 'San Francisco 49ers', 'San Francisco', 'NFC', 'West', '#AA0000', '#B3995D', 'SF'),
+            createTeam(League.NFL, 'Seattle Seahawks', 'Seattle', 'NFC', 'West', '#002244', '#69BE28', 'SEA'),
+            // NBA
+            createTeam(League.NBA, 'Boston Celtics', 'Boston', 'Eastern', 'Atlantic', '#007A33', '#BA9653', 'BOS'),
+            createTeam(League.NBA, 'Brooklyn Nets', 'Brooklyn', 'Eastern', 'Atlantic', '#000000', '#FFFFFF', 'BKN'),
+            createTeam(League.NBA, 'New York Knicks', 'New York', 'Eastern', 'Atlantic', '#006BB6', '#F58426', 'NYK'),
+            createTeam(League.NBA, 'Philadelphia 76ers', 'Philadelphia', 'Eastern', 'Atlantic', '#006BB6', '#ED174C', 'PHI'),
+            createTeam(League.NBA, 'Toronto Raptors', 'Toronto', 'Eastern', 'Atlantic', '#CE1141', '#000000', 'TOR'),
+            createTeam(League.NBA, 'Chicago Bulls', 'Chicago', 'Eastern', 'Central', '#CE1141', '#000000', 'CHI'),
+            createTeam(League.NBA, 'Cleveland Cavaliers', 'Cleveland', 'Eastern', 'Central', '#860038', '#041E42', 'CLE'),
+            createTeam(League.NBA, 'Detroit Pistons', 'Detroit', 'Eastern', 'Central', '#C8102E', '#1D42BA', 'DET'),
+            createTeam(League.NBA, 'Indiana Pacers', 'Indianapolis', 'Eastern', 'Central', '#002D62', '#FDBB30', 'IND'),
+            createTeam(League.NBA, 'Milwaukee Bucks', 'Milwaukee', 'Eastern', 'Central', '#00471B', '#EEE1C6', 'MIL'),
+            createTeam(League.NBA, 'Atlanta Hawks', 'Atlanta', 'Eastern', 'Southeast', '#E03A3E', '#C1D32F', 'ATL'),
+            createTeam(League.NBA, 'Charlotte Hornets', 'Charlotte', 'Eastern', 'Southeast', '#1D1160', '#00788C', 'CHA'),
+            createTeam(League.NBA, 'Miami Heat', 'Miami', 'Eastern', 'Southeast', '#98002E', '#F9A01B', 'MIA'),
+            createTeam(League.NBA, 'Orlando Magic', 'Orlando', 'Eastern', 'Southeast', '#0077C0', '#C4CED4', 'ORL'),
+            createTeam(League.NBA, 'Washington Wizards', 'Washington', 'Eastern', 'Southeast', '#002B5C', '#E31837', 'WAS'),
+            createTeam(League.NBA, 'Denver Nuggets', 'Denver', 'Western', 'Northwest', '#0E2240', '#FEC524', 'DEN'),
+            createTeam(League.NBA, 'Minnesota Timberwolves', 'Minneapolis', 'Western', 'Northwest', '#0C2340', '#236192', 'MIN'),
+            createTeam(League.NBA, 'Oklahoma City Thunder', 'Oklahoma City', 'Western', 'Northwest', '#007AC1', '#EF3B24', 'OKC'),
+            createTeam(League.NBA, 'Portland Trail Blazers', 'Portland', 'Western', 'Northwest', '#E03A3E', '#000000', 'POR'),
+            createTeam(League.NBA, 'Utah Jazz', 'Salt Lake City', 'Western', 'Northwest', '#002B5C', '#00471B', 'UTA'),
+            createTeam(League.NBA, 'Golden State Warriors', 'San Francisco', 'Western', 'Pacific', '#1D428A', '#FFC72C', 'GSW'),
+            createTeam(League.NBA, 'Los Angeles Clippers', 'Los Angeles', 'Western', 'Pacific', '#C8102E', '#1D428A', 'LAC'),
+            createTeam(League.NBA, 'Los Angeles Lakers', 'Los Angeles', 'Western', 'Pacific', '#552583', '#FDB927', 'LAL'),
+            createTeam(League.NBA, 'Phoenix Suns', 'Phoenix', 'Western', 'Pacific', '#1D1160', '#E56020', 'PHX'),
+            createTeam(League.NBA, 'Sacramento Kings', 'Sacramento', 'Western', 'Pacific', '#5A2D81', '#63727A', 'SAC'),
+            createTeam(League.NBA, 'Dallas Mavericks', 'Dallas', 'Western', 'Southwest', '#00538C', '#B8C4CA', 'DAL'),
+            createTeam(League.NBA, 'Houston Rockets', 'Houston', 'Western', 'Southwest', '#CE1141', '#000000', 'HOU'),
+            createTeam(League.NBA, 'Memphis Grizzlies', 'Memphis', 'Western', 'Southwest', '#5D76A9', '#12173F', 'MEM'),
+            createTeam(League.NBA, 'New Orleans Pelicans', 'New Orleans', 'Western', 'Southwest', '#0C2340', '#C8102E', 'NOP'),
+            createTeam(League.NBA, 'San Antonio Spurs', 'San Antonio', 'Western', 'Southwest', '#C4CED4', '#000000', 'SAS'),
+            // MLB
+            createTeam(League.MLB, 'Baltimore Orioles', 'Baltimore', 'AL', 'East', '#DF4601', '#000000', 'BAL'),
+            createTeam(League.MLB, 'Boston Red Sox', 'Boston', 'AL', 'East', '#BD3039', '#0C2340', 'BOS'),
+            createTeam(League.MLB, 'New York Yankees', 'New York', 'AL', 'East', '#003087', '#E4002C', 'NYY'),
+            createTeam(League.MLB, 'Tampa Bay Rays', 'Tampa', 'AL', 'East', '#092C5C', '#8FBCE6', 'TB'),
+            createTeam(League.MLB, 'Toronto Blue Jays', 'Toronto', 'AL', 'East', '#134A8E', '#1D2D5C', 'TOR'),
+            createTeam(League.MLB, 'Chicago White Sox', 'Chicago', 'AL', 'Central', '#27251F', '#C4CED4', 'CWS'),
+            createTeam(League.MLB, 'Cleveland Guardians', 'Cleveland', 'AL', 'Central', '#00385D', '#E50022', 'CLE'),
+            createTeam(League.MLB, 'Detroit Tigers', 'Detroit', 'AL', 'Central', '#0C2340', '#FA4616', 'DET'),
+            createTeam(League.MLB, 'Kansas City Royals', 'Kansas City', 'AL', 'Central', '#004687', '#BD9B60', 'KC'),
+            createTeam(League.MLB, 'Minnesota Twins', 'Minneapolis', 'AL', 'Central', '#002B5C', '#D31145', 'MIN'),
+            createTeam(League.MLB, 'Houston Astros', 'Houston', 'AL', 'West', '#002D62', '#EB6E1F', 'HOU'),
+            createTeam(League.MLB, 'Los Angeles Angels', 'Anaheim', 'AL', 'West', '#BA0021', '#003263', 'LAA'),
+            createTeam(League.MLB, 'Oakland Athletics', 'Oakland', 'AL', 'West', '#003831', '#EFB21E', 'OAK'),
+            createTeam(League.MLB, 'Seattle Mariners', 'Seattle', 'AL', 'West', '#0C2C56', '#005C5C', 'SEA'),
+            createTeam(League.MLB, 'Texas Rangers', 'Dallas', 'AL', 'West', '#003278', '#C0111F', 'TEX'),
+            createTeam(League.MLB, 'Atlanta Braves', 'Atlanta', 'NL', 'East', '#CE1141', '#13274F', 'ATL'),
+            createTeam(League.MLB, 'Miami Marlins', 'Miami', 'NL', 'East', '#00A3E0', '#41748D', 'MIA'),
+            createTeam(League.MLB, 'New York Mets', 'New York', 'NL', 'East', '#002D72', '#FF5910', 'NYM'),
+            createTeam(League.MLB, 'Philadelphia Phillies', 'Philadelphia', 'NL', 'East', '#E81828', '#002D72', 'PHI'),
+            createTeam(League.MLB, 'Washington Nationals', 'Washington', 'NL', 'East', '#AB0003', '#14225A', 'WSH'),
+            createTeam(League.MLB, 'Chicago Cubs', 'Chicago', 'NL', 'Central', '#0E3386', '#CC3433', 'CHC'),
+            createTeam(League.MLB, 'Cincinnati Reds', 'Cincinnati', 'NL', 'Central', '#C6011F', '#000000', 'CIN'),
+            createTeam(League.MLB, 'Milwaukee Brewers', 'Milwaukee', 'NL', 'Central', '#12284B', '#FFC52F', 'MIL'),
+            createTeam(League.MLB, 'Pittsburgh Pirates', 'Pittsburgh', 'NL', 'Central', '#27251F', '#FDB827', 'PIT'),
+            createTeam(League.MLB, 'St. Louis Cardinals', 'St. Louis', 'NL', 'Central', '#C41E3A', '#0C2340', 'STL'),
+            createTeam(League.MLB, 'Arizona Diamondbacks', 'Arizona', 'NL', 'West', '#A71930', '#E3D4AD', 'ARI'),
+            createTeam(League.MLB, 'Colorado Rockies', 'Denver', 'NL', 'West', '#333366', '#C4CED4', 'COL'),
+            createTeam(League.MLB, 'Los Angeles Dodgers', 'Los Angeles', 'NL', 'West', '#005A9C', '#EF3E42', 'LAD'),
+            createTeam(League.MLB, 'San Diego Padres', 'San Diego', 'NL', 'West', '#2F241D', '#FFC425', 'SD'),
+            createTeam(League.MLB, 'San Francisco Giants', 'San Francisco', 'NL', 'West', '#FD5A1E', '#27251F', 'SF'),
+            // NHL
+            createTeam(League.NHL, 'Boston Bruins', 'Boston', 'Eastern', 'Atlantic', '#FFB81C', '#000000', 'BOS'),
+            createTeam(League.NHL, 'Buffalo Sabres', 'Buffalo', 'Eastern', 'Atlantic', '#002654', '#FCB514', 'BUF'),
+            createTeam(League.NHL, 'Detroit Red Wings', 'Detroit', 'Eastern', 'Atlantic', '#CE1126', '#FFFFFF', 'DET'),
+            createTeam(League.NHL, 'Florida Panthers', 'Sunrise', 'Eastern', 'Atlantic', '#041E42', '#B9975B', 'FLA'),
+            createTeam(League.NHL, 'Montreal Canadiens', 'Montreal', 'Eastern', 'Atlantic', '#AF1E2D', '#192168', 'MTL'),
+            createTeam(League.NHL, 'Ottawa Senators', 'Ottawa', 'Eastern', 'Atlantic', '#DA1A32', '#000000', 'OTT'),
+            createTeam(League.NHL, 'Tampa Bay Lightning', 'Tampa', 'Eastern', 'Atlantic', '#002868', '#FFFFFF', 'TB'),
+            createTeam(League.NHL, 'Toronto Maple Leafs', 'Toronto', 'Eastern', 'Atlantic', '#00205B', '#FFFFFF', 'TOR'),
+            createTeam(League.NHL, 'Carolina Hurricanes', 'Raleigh', 'Eastern', 'Metro', '#CC0000', '#000000', 'CAR'),
+            createTeam(League.NHL, 'Columbus Blue Jackets', 'Columbus', 'Eastern', 'Metro', '#002654', '#CE1126', 'CBJ'),
+            createTeam(League.NHL, 'New Jersey Devils', 'Newark', 'Eastern', 'Metro', '#CE1126', '#000000', 'NJ'),
+            createTeam(League.NHL, 'New York Islanders', 'New York', 'Eastern', 'Metro', '#00539B', '#F47D30', 'NYI'),
+            createTeam(League.NHL, 'New York Rangers', 'New York', 'Eastern', 'Metro', '#0038A8', '#CE1126', 'NYR'),
+            createTeam(League.NHL, 'Philadelphia Flyers', 'Philadelphia', 'Eastern', 'Metro', '#F74902', '#000000', 'PHI'),
+            createTeam(League.NHL, 'Pittsburgh Penguins', 'Pittsburgh', 'Eastern', 'Metro', '#000000', '#FCB514', 'PIT'),
+            createTeam(League.NHL, 'Washington Capitals', 'Washington', 'Eastern', 'Metro', '#041E42', '#C8102E', 'WSH'),
+            createTeam(League.NHL, 'Chicago Blackhawks', 'Chicago', 'Western', 'Central', '#CF0A2C', '#000000', 'CHI'),
+            createTeam(League.NHL, 'Colorado Avalanche', 'Denver', 'Western', 'Central', '#6F263D', '#236192', 'COL'),
+            createTeam(League.NHL, 'Dallas Stars', 'Dallas', 'Western', 'Central', '#006847', '#8F8F8C', 'DAL'),
+            createTeam(League.NHL, 'Minnesota Wild', 'St. Paul', 'Western', 'Central', '#A6192E', '#154734', 'MIN'),
+            createTeam(League.NHL, 'Nashville Predators', 'Nashville', 'Western', 'Central', '#FFB81C', '#041E42', 'NSH'),
+            createTeam(League.NHL, 'St. Louis Blues', 'St. Louis', 'Western', 'Central', '#002F87', '#FCB514', 'STL'),
+            createTeam(League.NHL, 'Utah Hockey Club', 'Salt Lake City', 'Western', 'Central', '#000000', '#71AFE5', 'UTA'),
+            createTeam(League.NHL, 'Winnipeg Jets', 'Winnipeg', 'Western', 'Central', '#041E42', '#004C97', 'WPG'),
+            createTeam(League.NHL, 'Anaheim Ducks', 'Anaheim', 'Western', 'Pacific', '#F47A38', '#B9975B', 'ANA'),
+            createTeam(League.NHL, 'Calgary Flames', 'Calgary', 'Western', 'Pacific', '#C8102E', '#F1BE48', 'CGY'),
+            createTeam(League.NHL, 'Edmonton Oilers', 'Edmonton', 'Western', 'Pacific', '#041E42', '#FF4C00', 'EDM'),
+            createTeam(League.NHL, 'Los Angeles Kings', 'Los Angeles', 'Western', 'Pacific', '#111111', '#A2AAAD', 'LA'),
+            createTeam(League.NHL, 'San Jose Sharks', 'San Jose', 'Western', 'Pacific', '#006D75', '#EA7200', 'SJ'),
+            createTeam(League.NHL, 'Seattle Kraken', 'Seattle', 'Western', 'Pacific', '#001628', '#99D9D9', 'SEA'),
+            createTeam(League.NHL, 'Vancouver Canucks', 'Vancouver', 'Western', 'Pacific', '#00205B', '#00843D', 'VAN'),
+            createTeam(League.NHL, 'Vegas Golden Knights', 'Las Vegas', 'Western', 'Pacific', '#B4975A', '#333F42', 'VGK'),
+        ];
+
+        // --- 2. SERVICES ---
+        const getAIClient = () => {
+            if (!window.GoogleGenAI) return null;
+            return new window.GoogleGenAI({ apiKey: window.process.env.API_KEY });
+        };
+
+        const getLeagueSeasonContext = (league) => {
+            const now = new Date();
+            const month = now.getMonth() + 1; 
+            const year = now.getFullYear();
+            const dateString = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric', day: 'numeric' });
+            let season = "", phase = "";
+
+            switch (league) {
+                case League.NBA:
+                case League.NHL:
+                    if (month >= 10) { season = `${year}-${year + 1}`; phase = "Regular Season"; }
+                    else if (month <= 4) { season = `${year - 1}-${year}`; phase = "Regular Season (Late)"; }
+                    else if (month >= 4 && month <= 6) { season = `${year - 1}-${year}`; phase = "Playoffs/Finals"; }
+                    else { season = `${year - 1}-${year}`; phase = "Off-Season"; }
+                    break;
+                case League.NFL:
+                    if (month >= 9) { season = `${year}-${year + 1}`; phase = "Regular Season"; }
+                    else if (month <= 2) { season = `${year - 1}-${year}`; phase = "Playoffs"; }
+                    else { season = `${year - 1}-${year}`; phase = "Off-Season"; }
+                    break;
+                case League.MLB:
+                    if (month >= 4 && month <= 9) { season = `${year}`; phase = "Regular Season"; }
+                    else if (month === 10 || month === 11) { season = `${year}`; phase = "Postseason"; }
+                    else { season = `${year}`; phase = "Off-Season"; }
+                    break;
+            }
+            return `TODAY IS ${dateString}. The ${league} is in the ${season} season, phase: ${phase}.`;
+        };
+
+        const parseJSON = (text = "") => {
+            const match = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```([\s\S]*?)```/);
+            try { return JSON.parse(match ? match[1] : text); } catch (e) { return {}; }
+        };
+
+        const fetchInfo = async (team, type, attempt = 1) => {
+            const ai = getAIClient();
+            if (!ai) return null;
+
+            const ctx = getLeagueSeasonContext(team.league);
+            const rankType = team.league === 'MLB' ? 'League' : 'Conference';
+            let prompt = "";
+
+            if (type === 'basic') {
+                prompt = `${ctx} Find verified basic info for ${team.name}.
+                  Reqs: 
+                  1. Rankings: Strict "X/Y" format. 
+                     - Division: Rank / Total Teams in Div
+                     - ${rankType}: Rank / Total Teams in ${rankType}
+                     - Total: Rank / Total Teams in League
+                  2. Playoff Summary: If in season, current standing/seed. If off-season, last result (e.g. "World Series Champs", "Missed Playoffs").
+                  3. Valuation: Forbes amount + Rank (e.g. "1st in NFL").
+                  4. Fanbase: 3-5 word tier desc.
+                  Return JSON: { "stadium":"", "valuation":"", "valuationRank":"", "fanbaseDesc":"", "seasonStatus":"", "record":"", "rankLabels": {"division":"Division","conference":"${rankType}","total":"Total"}, "rankValues": {"division":"X/Y","conference":"X/Y","total":"X/Y"}, "playoffSummary":"" }`;
+            } else if (type === 'roster') {
+                prompt = `${ctx} Find top 3 stars for ${team.name}.
+                  Reqs: Jersey Number is CRITICAL.
+                  Return JSON: { "topStars": [{ "name":"", "age":"", "country":"Emoji", "position":"", "jerseyNumber":"#", "achievements":"", "seasonHighlight":"" }] }`;
+            } else if (type === 'news') {
+                prompt = `${ctx} Find 5 verified narratives for ${team.name} for CURRENT phase.
+                  Categories: positive, negative, special, viral, choice.
+                  Return JSON: { "content": { "positive":"", "negative":"", "special":"", "viral":"", "choice":"" } }`;
+            }
+
+            try {
+                const res = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: prompt,
+                    config: { tools: [{ googleSearch: {} }] }
+                });
+                const data = parseJSON(res.text);
+                const sources = res.candidates?.[0]?.groundingMetadata?.groundingChunks?.map(c => c.web ? {title: c.web.title, uri: c.web.uri} : null).filter(Boolean) || [];
+                return { ...data, sources };
+            } catch (e) { 
+                console.error(`Attempt ${attempt} failed for ${type}:`, e);
+                if ((e.status === 429 || e.message?.includes('429') || e.message?.includes('quota')) && attempt <= 3) {
+                    const delay = Math.pow(2, attempt) * 1000 + (Math.random() * 1000);
+                    console.log(`Rate limit hit. Retrying ${type} in ${Math.round(delay)}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return fetchInfo(team, type, attempt + 1);
+                }
+                return null; 
+            }
+        };
+
+        // --- 3. COMPONENTS ---
+
+        // --- MAP VISUALIZATION (Fixed Zoom/Pan) ---
+        const MapVisualization = ({ teams, onSelectTeam, selectedTeam }) => {
+            const svgRef = useRef(null);
+            const wrapperRef = useRef(null);
+            const [geoData, setGeoData] = useState(null);
+            const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+            const [simulatedNodes, setSimulatedNodes] = useState([]);
+            const zoomRef = useRef(null);
+            const gRef = useRef(null);
+
+            // Load Map Data
+            useEffect(() => {
+                fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json')
+                    .then(r => r.json())
+                    .then(topology => {
+                        setGeoData(topojson.feature(topology, topology.objects.states));
+                    })
+                    .catch(err => {
+                        console.warn("Map Fetch Error (likely CORS if local):", err);
+                    });
+            }, []);
+
+            // Resize Observer for Responsive Map
+            useEffect(() => {
+                if (!wrapperRef.current) return;
+                const resizeObserver = new ResizeObserver(entries => {
+                    for (let entry of entries) {
+                        const { width, height } = entry.contentRect;
+                        if(width > 0 && height > 0) {
+                             setDimensions({ width, height });
+                        }
+                    }
+                });
+                resizeObserver.observe(wrapperRef.current);
+                return () => resizeObserver.disconnect();
+            }, []);
+
+            // D3 Logic
+            useEffect(() => {
+                if (!geoData || !svgRef.current || dimensions.width === 0) return;
+
+                const svg = d3.select(svgRef.current);
+                const { width, height } = dimensions;
+                
+                // Clean slate
+                svg.selectAll("*").remove();
+
+                // Create a container Group that will be transformed
+                const g = svg.append("g");
+                gRef.current = g;
+
+                // 1. Massive Transparent Rect to catch Zoom Events anywhere
+                g.append("rect")
+                    .attr("width", width * 10)
+                    .attr("height", height * 10)
+                    .attr("x", -width * 5)
+                    .attr("y", -height * 5)
+                    .attr("fill", "transparent");
+
+                // Projection Fitting
+                const padding = 40;
+                const projection = d3.geoAlbersUsa().fitExtent([[padding, padding], [width - padding, height - padding]], geoData);
+                const path = d3.geoPath().projection(projection);
+
+                // Draw Map
+                g.selectAll("path.state").data(geoData.features).enter().append("path")
+                    .attr("class", "state")
+                    .attr("d", path).attr("fill", "#1e293b").attr("stroke", "#334155").attr("stroke-width", 1);
+
+                // Calculate Node Positions
+                const nodes = teams.map(t => {
+                    const p = projection([t.lng, t.lat]);
+                    // Fallback if outside USA projection (e.g. Toronto sometimes tricky if precision low)
+                    return { ...t, x: p?p[0]:width/2, y: p?p[1]:height/2, ox: p?p[0]:width/2, oy: p?p[1]:height/2 };
+                }).filter(n => n.ox !== 0);
+
+                // Force Simulation to separate nearby teams
+                const sim = d3.forceSimulation(nodes)
+                    .force("x", d3.forceX(d => d.ox).strength(0.2))
+                    .force("y", d3.forceY(d => d.oy).strength(0.2))
+                    .force("collide", d3.forceCollide(28))
+                    .stop();
+                for(let i=0; i<220; ++i) sim.tick();
+                setSimulatedNodes(nodes);
+
+                // Draw Nodes
+                const nodeGroup = g.selectAll("g.node").data(nodes).enter().append("g")
+                    .attr("transform", d => `translate(${d.x}, ${d.y})`)
+                    .attr("cursor", "pointer")
+                    .on("click", (e, d) => { e.stopPropagation(); onSelectTeam(d); });
+
+                // Leader Lines
+                g.selectAll("line.leader").data(nodes).enter().append("line")
+                    .attr("x1", d=>d.ox).attr("y1", d=>d.oy).attr("x2", d=>d.x).attr("y2", d=>d.y)
+                    .attr("stroke", "#94a3b8").attr("stroke-dasharray", "3,3").attr("opacity", 0.5);
+
+                nodeGroup.append("circle").attr("r", 22).attr("fill", "#0f172a")
+                    .attr("stroke", d => getDivisionColor(d.league, d.conference, d.division)).attr("stroke-width", 3);
+                
+                nodeGroup.append("image").attr("href", d => d.logoUrl).attr("width", 34).attr("height", 34).attr("x", -17).attr("y", -17);
+                
+                nodeGroup.append("text").text(d => d.abbreviation).attr("y", 36).attr("text-anchor", "middle")
+                    .attr("fill", "white").attr("font-size", "11px").attr("font-weight", "bold").classed("map-label", true);
+
+                // Zoom Behavior - Unrestricted
+                const zoomBehavior = d3.zoom()
+                    .scaleExtent([0.5, 8]) // Allow zooming out further
+                    .on("zoom", (e) => {
+                        g.attr("transform", e.transform);
+                    });
+
+                svg.call(zoomBehavior);
+                zoomRef.current = zoomBehavior;
+
+            }, [geoData, teams, dimensions]);
+
+            const handleZoom = (factor) => {
+                if(svgRef.current && zoomRef.current) {
+                    d3.select(svgRef.current).transition().duration(500).call(zoomRef.current.scaleBy, factor);
+                }
+            };
+            
+            const handleReset = () => {
+                 if(svgRef.current && zoomRef.current) {
+                    d3.select(svgRef.current).transition().duration(750).call(zoomRef.current.transform, d3.zoomIdentity);
+                }
+            };
+
+            return (
+                <div className="w-full h-full relative bg-slate-950 overflow-hidden">
+                    {!geoData && <div className="absolute inset-0 flex items-center justify-center text-slate-400 animate-pulse text-xl">Loading Map Data...</div>}
+                    
+                    <div ref={wrapperRef} className="w-full h-full">
+                         <svg ref={svgRef} width={dimensions.width} height={dimensions.height} className="touch-none block w-full h-full cursor-move" />
+                    </div>
+                    
+                    {/* Legend - MOVED TO TOP LEFT for safety */}
+                    <div className="absolute top-4 left-4 md:top-6 md:left-6 p-4 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-xl shadow-2xl max-h-[60vh] overflow-y-auto scrollbar-thin pointer-events-auto z-10">
+                        <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 border-b border-slate-700 pb-1">Divisions</h4>
+                        <div className="space-y-1">
+                           {Array.from(new Set(teams.map(t => `${t.conference} ${t.division}`))).sort().map(key => {
+                               const [conf, div] = key.split(' ');
+                               const team = teams.find(t => t.conference === conf && t.division === div);
+                               const color = getDivisionColor(team.league, conf, div);
+                               return (
+                                   <div key={key} className="flex items-center gap-2">
+                                       <span className="w-3 h-3 rounded-full" style={{background: color}}></span>
+                                       <span className="text-[10px] text-slate-300 font-medium">{conf} {div}</span>
+                                   </div>
+                               )
+                           })}
+                        </div>
+                    </div>
+
+                    {/* Zoom Controls - MOVED TO BOTTOM RIGHT for thumb reach */}
+                    <div className="absolute bottom-8 right-4 md:bottom-12 md:right-8 flex flex-col gap-2 pointer-events-auto z-10">
+                        <button onClick={() => handleZoom(1.4)} className="bg-slate-800 w-10 h-10 rounded-lg text-white hover:bg-slate-700 shadow-xl border border-slate-700 text-xl font-bold flex items-center justify-center transition-colors active:scale-95">+</button>
+                        <button onClick={() => handleZoom(0.6)} className="bg-slate-800 w-10 h-10 rounded-lg text-white hover:bg-slate-700 shadow-xl border border-slate-700 text-xl font-bold flex items-center justify-center transition-colors active:scale-95">−</button>
+                        <button onClick={handleReset} className="bg-slate-800 w-10 h-10 rounded-lg text-white hover:bg-slate-700 shadow-xl border border-slate-700 text-xs font-bold flex items-center justify-center transition-colors uppercase active:scale-95">Fit</button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- TEAM DETAILS (Full Screen Overlay) ---
+        const TeamDetails = ({ team, onClose }) => {
+            const [data, setData] = useState({ basic: null, roster: null, news: null });
+            const [fontSize, setFontSize] = useState('md'); 
+            const [error, setError] = useState(null);
+
+            const f = {
+                sm: { title: 'text-3xl', body: 'text-sm', header: 'text-base', num: 'text-3xl', badge: 'text-xs' },
+                md: { title: 'text-5xl', body: 'text-base', header: 'text-xl', num: 'text-4xl', badge: 'text-sm' },
+                lg: { title: 'text-6xl', body: 'text-lg', header: 'text-2xl', num: 'text-5xl', badge: 'text-base' }
+            }[fontSize];
+            
+            useEffect(() => {
+                if(team) {
+                    setData({ basic: null, roster: null, news: null });
+                    setError(null);
+                    const loadData = async () => {
+                        try {
+                            const basic = await fetchInfo(team, 'basic');
+                            if(!basic) throw new Error("Failed to load basic info. Check API Key.");
+                            setData(prev => ({...prev, basic}));
+                            await new Promise(r => setTimeout(r, 1000));
+                            const roster = await fetchInfo(team, 'roster');
+                            setData(prev => ({...prev, roster: roster || { topStars: [] } }));
+                            await new Promise(r => setTimeout(r, 1000));
+                            const news = await fetchInfo(team, 'news');
+                            setData(prev => ({...prev, news: news || { content: {} } }));
+                        } catch (err) {
+                            console.warn(err);
+                            setError("Data limit reached. Try again later.");
+                        }
+                    };
+                    loadData();
+                }
+            }, [team]);
+
+            if (!team) return null;
+
+            return (
+                <div className="fixed inset-0 z-50 flex bg-slate-950 animate-fadeIn">
+                    <div className="w-full h-full flex flex-col relative animate-slideUp bg-slate-950 overflow-hidden">
+                        <button onClick={onClose} className="absolute top-4 right-4 z-50 bg-black/40 p-3 rounded-full text-white hover:bg-red-600 border border-white/20 backdrop-blur">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+
+                        <div className="relative h-64 md:h-80 flex-none overflow-hidden">
+                             <div className="absolute inset-0" style={{background: `linear-gradient(135deg, ${team.primaryColor} 0%, ${team.secondaryColor} 100%)`}}></div>
+                             <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]"></div>
+                             <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8 bg-gradient-to-t from-slate-950 to-transparent flex items-end gap-4 md:gap-6">
+                                 <div className="w-24 h-24 md:w-40 md:h-40 bg-white rounded-full p-2 md:p-4 shadow-2xl border-4 border-white flex-shrink-0">
+                                     <img src={team.logoUrl} className="w-full h-full object-contain" alt={team.name} />
+                                 </div>
+                                 <div className="flex-grow mb-2">
+                                     <h1 className={`${f.title} font-black text-white drop-shadow-lg leading-none mb-2 md:mb-3`}>{team.name}</h1>
+                                     <div className="flex gap-2 md:gap-3">
+                                         <span className={`bg-black/40 backdrop-blur text-white px-3 py-1 rounded-lg ${f.badge} font-bold uppercase border border-white/10`}>{team.conference}</span>
+                                         <span className={`bg-black/40 backdrop-blur text-white px-3 py-1 rounded-lg ${f.badge} font-bold uppercase border border-white/10`}>{team.division}</span>
+                                     </div>
+                                 </div>
+                                 <div className="hidden md:flex bg-slate-900/50 backdrop-blur rounded-lg border border-slate-700 p-1 gap-1 mb-4 self-start">
+                                    {['sm', 'md', 'lg'].map(s => (
+                                        <button key={s} onClick={()=>setFontSize(s)} className={`px-4 py-2 rounded text-sm font-bold ${fontSize===s ? 'bg-white text-slate-900' : 'text-slate-400 hover:text-white'}`}>
+                                            {s==='sm'?'A-':s==='md'?'A':s==='lg'?'A+':'A'}
+                                        </button>
+                                    ))}
+                                 </div>
+                             </div>
+                        </div>
+
+                        <div className="flex-grow overflow-y-auto p-6 md:p-10 bg-slate-950 scrollbar-thin">
+                             {error && <div className="bg-red-900/20 border border-red-800 p-6 rounded-2xl mb-8 text-red-300 text-lg text-center">{error}</div>}
+                             <div className="grid grid-cols-1 xl:grid-cols-3 gap-10 max-w-[1600px] mx-auto">
+                                 <div className="space-y-8">
+                                     {!data.basic ? <div className="h-64 bg-slate-900 rounded-3xl animate-pulse flex items-center justify-center text-slate-600">Loading Basic Info...</div> : (
+                                         <>
+                                            <div className="bg-slate-900 rounded-3xl p-8 border border-slate-800 shadow-lg">
+                                                <div className="flex justify-between items-end mb-4">
+                                                    <div className="text-slate-400 font-bold uppercase text-sm tracking-wider">Current Record</div>
+                                                    <div className={`${f.body} font-bold ${data.basic.seasonStatus==='In-Season'?'text-emerald-400':'text-slate-500'}`}>{data.basic.seasonStatus}</div>
+                                                </div>
+                                                <div className="text-7xl font-black text-white mb-6">{data.basic.record}</div>
+                                                {data.basic.playoffSummary && data.basic.playoffSummary !== 'N/A' && (
+                                                    <div className="bg-gradient-to-r from-blue-900/40 to-slate-900 border border-blue-500/30 rounded-xl p-4 flex items-center gap-4">
+                                                        <span className="text-3xl">🏆</span>
+                                                        <span className={`${f.header} font-bold text-blue-200 uppercase tracking-wide`}>{data.basic.playoffSummary}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 shadow-lg">
+                                                <div className="bg-slate-900 px-6 py-3 text-sm font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">Rankings</div>
+                                                <div className="grid grid-cols-3 divide-x divide-slate-800">
+                                                    {['division', 'conference', 'total'].map(type => (
+                                                        <div key={type} className="p-6 text-center hover:bg-slate-800/30 transition-colors">
+                                                            <div className="text-xs text-slate-500 font-bold uppercase mb-2 truncate">{data.basic.rankLabels?.[type] || type}</div>
+                                                            <div className={`${f.num} font-black text-white`}>{data.basic.rankValues?.[type]?.split('/')[0] || '-'}</div>
+                                                            <div className="text-xs text-slate-500 font-mono">of {data.basic.rankValues?.[type]?.split('/')[1] || '-'}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className="bg-slate-900 rounded-3xl p-6 border border-slate-800 shadow-lg">
+                                                    <div className="text-slate-500 text-xs font-bold uppercase mb-2">Valuation</div>
+                                                    <div className={`${f.header} font-bold text-emerald-400 leading-tight`}>{data.basic.valuation}</div>
+                                                    <div className="text-sm text-slate-400 mt-2">{data.basic.valuationRank}</div>
+                                                </div>
+                                                <div className="bg-slate-900 rounded-3xl p-6 border border-slate-800 shadow-lg">
+                                                    <div className="text-slate-500 text-xs font-bold uppercase mb-2">Stadium</div>
+                                                    <div className={`${f.body} font-bold text-white leading-snug`}>{data.basic.stadium}</div>
+                                                </div>
+                                            </div>
+                                         </>
+                                     )}
+                                 </div>
+                                 <div className="xl:col-span-2 space-y-10">
+                                     <div>
+                                         <h3 className={`${f.header} font-bold text-white mb-6 flex items-center gap-3 border-b border-slate-800 pb-4`}><span className="text-yellow-500">★</span> Key Players</h3>
+                                         {!data.roster ? <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">{[1,2,3].map(i=><div key={i} className="h-48 bg-slate-900 rounded-3xl flex items-center justify-center text-sm text-slate-600">Loading Players...</div>)}</div> : (
+                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                                 {(data.roster.topStars || []).map((star, i) => (
+                                                     <div key={i} className="bg-slate-900 rounded-3xl p-6 border border-slate-800 hover:border-slate-600 transition-all group relative overflow-hidden shadow-lg">
+                                                         <div className="flex items-center gap-5 mb-4 relative z-10">
+                                                             <div className="w-20 h-20 rounded-full bg-white border-2 border-slate-600 flex items-center justify-center flex-shrink-0 text-slate-900 text-3xl font-black jersey-num overflow-hidden shadow-lg" style={{ color: team.primaryColor, borderColor: team.secondaryColor }}>
+                                                                 {star.imageUrl ? <img src={star.imageUrl} className="w-full h-full object-cover" onError={e=>e.currentTarget.style.display='none'}/> : (star.jerseyNumber || '#')}
+                                                             </div>
+                                                             <div>
+                                                                 <div className={`${f.header} font-bold text-white leading-tight mb-1`}>{star.name}</div>
+                                                                 <div className="text-sm text-slate-400">{star.position} • {star.country}</div>
+                                                             </div>
+                                                         </div>
+                                                         <div className="bg-slate-950/50 rounded-xl p-4 mb-3 relative z-10 border border-slate-800/50">
+                                                             <p className={`${f.body} text-slate-300 italic leading-relaxed`}>"{star.seasonHighlight}"</p>
+                                                         </div>
+                                                         <div className="text-xs font-bold text-yellow-600 uppercase tracking-wide relative z-10">🏆 {star.achievements}</div>
+                                                     </div>
+                                                 ))}
+                                             </div>
+                                         )}
+                                     </div>
+                                     <div>
+                                          <h3 className={`${f.header} font-bold text-white mb-6 flex items-center gap-3 border-b border-slate-800 pb-4`}><span>📰</span> Season Narrative</h3>
+                                          {!data.news ? <div className="h-48 bg-slate-900 rounded-3xl animate-pulse flex items-center justify-center text-base text-slate-600">Loading News...</div> : (
+                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                  {Object.entries(data.news.content||{}).map(([k,v]) => {
+                                                      const styles = { positive: { bg: 'bg-emerald-900/10', border: 'border-emerald-900/30', text: 'text-emerald-300', icon: '📈' }, negative: { bg: 'bg-red-900/10', border: 'border-red-900/30', text: 'text-red-300', icon: '📉' }, viral: { bg: 'bg-orange-900/10', border: 'border-orange-900/30', text: 'text-orange-300', icon: '🔥' }, special: { bg: 'bg-purple-900/10', border: 'border-purple-900/30', text: 'text-purple-300', icon: '✨' }, choice: { bg: 'bg-blue-900/10', border: 'border-blue-900/30', text: 'text-blue-300', icon: '🤖' } }[k] || { bg: 'bg-slate-800', border: 'border-slate-700', text: 'text-slate-300', icon: '•' };
+                                                      return (
+                                                          <div key={k} className={`${styles.bg} ${styles.border} border rounded-2xl p-5 shadow-md`}>
+                                                              <div className="flex items-center gap-3 mb-3">
+                                                                  <span className="text-2xl">{styles.icon}</span>
+                                                                  <span className={`text-xs font-black uppercase tracking-widest ${styles.text}`}>{k}</span>
+                                                              </div>
+                                                              <p className={`${f.body} text-slate-200 leading-relaxed`}>{v}</p>
+                                                          </div>
+                                                      )
+                                                  })}
+                                              </div>
+                                          )}
+                                     </div>
+                                     {!data.basic && data.basic?.sources && (
+                                         <div className="pt-8 border-t border-slate-800/50 pb-12">
+                                             <div className="text-xs text-slate-600 uppercase font-bold mb-3">Verified Sources</div>
+                                             <div className="flex flex-wrap gap-3 opacity-60 hover:opacity-100 transition-opacity">
+                                                 {data.basic.sources.map((s,i)=>(<a key={i} href={s.uri} target="_blank" className="bg-slate-900 px-3 py-1.5 rounded-lg text-xs text-blue-400 hover:text-white hover:bg-slate-800 transition-colors truncate max-w-[250px] border border-slate-800">{s.title}</a>))}
+                                             </div>
+                                         </div>
+                                     )}
+                                 </div>
+                             </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MAIN APP ---
+        const App = () => {
+            const [currentLeague, setCurrentLeague] = useState(League.NFL);
+            const [selectedTeam, setSelectedTeam] = useState(null);
+            const [hasKey, setHasKey] = useState(true);
+
+            useEffect(() => {
+                if (window.process.env.API_KEY === 'YOUR_GEMINI_API_KEY_HERE') setHasKey(false);
+            }, []);
+
+            const filteredTeams = useMemo(() => TEAMS.filter(t => t.league === currentLeague), [currentLeague]);
+
+            if (!hasKey) {
+                return (
+                    <div className="h-full flex items-center justify-center bg-red-950 text-white p-10 text-center">
+                        <div className="max-w-xl">
+                            <h1 className="text-4xl font-black mb-4">⚠️ Setup Required</h1>
+                            <p className="text-lg mb-6 text-red-200">This app requires a Gemini API Key to function.</p>
+                            <div className="bg-black/40 p-6 rounded-xl text-left mb-6 font-mono text-sm border border-red-800">
+                                1. Open this <strong>index.html</strong> file in a text editor.<br/>
+                                2. Find <code>YOUR_GEMINI_API_KEY_HERE</code>.<br/>
+                                3. Replace it with your key.<br/>
+                                4. Refresh this page.
+                            </div>
+                            <button onClick={() => window.location.reload()} className="bg-white text-red-900 px-8 py-3 rounded-full font-bold hover:bg-gray-200 shadow-xl">I have updated it, Reload</button>
+                        </div>
+                    </div>
+                )
+            }
+
+            return (
+                <div className="h-full w-full flex flex-col relative bg-slate-950 overflow-hidden">
+                    <header className="flex-none bg-slate-900 border-b border-slate-800 z-20 shadow-2xl">
+                        <div className="w-full px-6 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-900/30">
+                                   <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                </div>
+                                <h1 className="text-xl font-bold tracking-tight text-white hidden md:block">Sports Geo-Atlas</h1>
+                            </div>
+                            <div className="flex gap-2 justify-center overflow-x-auto scrollbar-hide">
+                              {Object.values(League).map((league) => (
+                                  <button key={league} onClick={() => { setCurrentLeague(league); setSelectedTeam(null); }} className={`px-4 py-2 rounded-full font-bold transition-all text-sm ${currentLeague === league ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>{league}</button>
+                              ))}
+                            </div>
+                            <div className="hidden md:block text-xs text-slate-500 font-mono bg-slate-800 px-3 py-1 rounded-full border border-slate-700">Gemini 2.5 Flash Integrated</div>
+                        </div>
+                    </header>
+
+                    <main className="flex-grow relative w-full h-full overflow-hidden">
+                         <MapVisualization teams={filteredTeams} selectedTeam={selectedTeam} onSelectTeam={setSelectedTeam} />
+                         {selectedTeam && <TeamDetails team={selectedTeam} onClose={() => setSelectedTeam(null)} />}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
+    
